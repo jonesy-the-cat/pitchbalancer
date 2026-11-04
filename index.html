@@ -278,10 +278,11 @@
       const { primary, backup } = teamCoaches(team);
       const total = primary.length + backup.length;
       const list = [...primary.map(escapeHtml), ...backup.map(n => `${escapeHtml(n)} <span class="text-slate-500">(backup)</span>`)].join(', ');
-      const warning = total === 0 ? '<span class="text-rose-400 font-semibold">⚠️ No coach</span>'
+      const check = generatedTeams.length === 2;
+      const warning = !check ? '' : total === 0 ? '<span class="text-rose-400 font-semibold">⚠️ No coach</span>'
         : total < COACHES_NEEDED ? '<span class="text-amber-400 font-semibold ml-1">⚠️ needs 1 more</span>' : '';
       return `
-        <div class="mb-3 px-2.5 py-1.5 rounded-lg bg-slate-950/70 border ${total < COACHES_NEEDED ? 'border-amber-500/40' : 'border-slate-800'} flex items-center justify-between gap-2 text-xs">
+        <div class="mb-3 px-2.5 py-1.5 rounded-lg bg-slate-950/70 border ${check && total < COACHES_NEEDED ? 'border-amber-500/40' : 'border-slate-800'} flex items-center justify-between gap-2 text-xs">
           <span class="text-slate-400 text-[10px] font-semibold uppercase tracking-wider shrink-0">Coaches</span>
           <span class="font-medium text-xs text-indigo-300 text-right">${total > 0 ? `👔 ${list}` : ''}${warning}</span>
         </div>`;
@@ -726,16 +727,18 @@
         penalty += (Math.max(...tCounts) - Math.min(...tCounts)) * 2500;
       });
 
-      // Coaches: every team must have a coach, and should have 2 (backups count towards this)
-      const coachInfo = teams.map(teamCoaches);
-      coachInfo.forEach(c => {
-        const total = c.primary.length + c.backup.length;
-        if (total === 0) penalty += 100000;          // a team with no coach can't play
-        else if (total < COACHES_NEEDED) penalty += 15000;
-      });
-      // Share the primary coaches out evenly before leaning on backups
-      const primaryCounts = coachInfo.map(c => c.primary.length);
-      penalty += (Math.max(...primaryCounts) - Math.min(...primaryCounts)) * 3000;
+      // Coaches only matter when picking 2 teams: then each team must have at least 2
+      // (backups count towards this). With 1, 3 or 4 teams coaches are ignored.
+      if (teams.length === 2) {
+        const coachInfo = teams.map(teamCoaches);
+        coachInfo.forEach(c => {
+          const total = c.primary.length + c.backup.length;
+          if (total < COACHES_NEEDED) penalty += (COACHES_NEEDED - total) * 100000;
+        });
+        // Share the primary coaches out evenly before leaning on backups
+        const primaryCounts = coachInfo.map(c => c.primary.length);
+        penalty += (Math.max(...primaryCounts) - Math.min(...primaryCounts)) * 3000;
+      }
 
       // Beginners (rated 1, or tagged Development) have little effect on games: share them out equally
       const isBeginner = p => p.rating === 1 || (p.tags || []).includes("Development");
