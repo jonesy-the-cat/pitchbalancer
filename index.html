@@ -387,11 +387,14 @@
           const cloudPlayers = normalizePlayers(snapshot.val());
           if (cloudPlayers.length > 0) {
             players = cloudPlayers;
+            backupLocal();
           } else {
-            players = JSON.parse(JSON.stringify(DEFAULT_ROSTER));
-            savePlayers();
+            // The cloud squad looks empty. Never overwrite it automatically: show the last copy
+            // this device saw (or the starting list) and only write when you make a change.
+            players = loadLocalBackup() || JSON.parse(JSON.stringify(DEFAULT_ROSTER));
           }
-          setSyncBadge('cloud');
+          cloudUsable = true;
+          setSyncBadge(saveFailed ? 'error' : 'cloud');
           renderSquadList();
           if (firstLoad) {
             firstLoad = false;
@@ -401,6 +404,7 @@
           }
         }, (error) => {
           console.warn("Falling back to local cache:", error);
+          cloudUsable = false; // can't read the cloud, so never write a possibly stale copy to it
           loadLocalFallback();
         });
       } else {
@@ -446,23 +450,58 @@
       balanceTeams();
     }
 
-    function savePlayers() {
+    let cloudUsable = true;   // false when the cloud couldn't be read: then nothing is written to it
+    let saveFailed = false;   // true after a rejected save, until the next one works
+
+    function clonePlayers(list) {
+      return JSON.parse(JSON.stringify(list));
+    }
+    function backupLocal() {
       try { localStorage.setItem('pitchbalancer_players_v15', JSON.stringify(players)); } catch (e) {}
-      if (db) {
-        db.ref('pitchbalancer/roster').set(players)
-          .then(() => setSyncBadge('cloud'))
-          .catch(err => {
-            console.warn("Cloud save failed:", err);
-            setSyncBadge('error');
-          });
+    }
+    function loadLocalBackup() {
+      try {
+        const saved = normalizePlayers(JSON.parse(localStorage.getItem('pitchbalancer_players_v15')));
+        return saved.length > 0 ? saved : null;
+      } catch (e) { return null; }
+    }
+
+    function reportSaveResult(promise) {
+      promise.then(result => {
+        if (result && result.committed === false) throw new Error('Save was not applied');
+        saveFailed = false;
+        setSyncBadge('cloud');
+      }).catch(err => {
+        console.warn("Cloud save failed:", err);
+        saveFailed = true;
+        setSyncBadge('error');
+        alert("That change could not be saved to the cloud, so it has been undone. Check your connection and try again.");
+      });
+    }
+
+    // Replaces the WHOLE squad (Reset Default, Import). Everyday changes use updateRoster instead.
+    function savePlayers() {
+      backupLocal();
+      if (db && cloudUsable) {
+        reportSaveResult(db.ref('pitchbalancer/roster').set(players));
       }
     }
 
-    // Use after an edit to the squad: keeps the current teams and just updates them
-    function rosterChanged() {
-      savePlayers();
+    // Every everyday change (add, edit, delete, attendance) goes through here.
+    // The change is applied to this screen straight away, and then to the LATEST copy in the
+    // cloud, so another device's recent changes are kept, not overwritten by an out-of-date copy.
+    function updateRoster(mutator, rebalance) {
+      const before = clonePlayers(players);
+      players = mutator(clonePlayers(players));
+      backupLocal();
+      if (db && cloudUsable) {
+        reportSaveResult(db.ref('pitchbalancer/roster').transaction(current => {
+          const latest = normalizePlayers(current);
+          return mutator(latest.length > 0 ? latest : clonePlayers(before));
+        }));
+      }
       renderSquadList();
-      syncTeamsWithRoster();
+      if (rebalance) balanceTeams(); else syncTeamsWithRoster();
     }
 
     function replaceRoster(newPlayers) {
@@ -473,7 +512,7 @@
     }
 
     function resetToImportedDefault() {
-      if (confirm("Reset roster to original defaults? This changes the squad on every device.")) {
+      if (confirm("Reset the squad to the original starting list?\n\nThis removes ALL your changes (coaches, ratings, positions, new players) on every device.")) {
         replaceRoster(JSON.parse(JSON.stringify(DEFAULT_ROSTER)));
       }
     }
@@ -564,20 +603,20 @@
 
       if (!name) return;
 
-      players.push({
+      const newPlayer = {
         id: 'p_' + Date.now(),
         name,
         coach,
         rating: Math.max(1, Math.min(10, rating)),
         tags: orderedTags(quickSelectedTags),
         attending: true
-      });
+      };
 
       nameInput.value = '';
       coachInput.value = '';
       quickSelectedTags.clear();
       renderQuickAddTags();
-      rosterChanged();
+      updateRoster(list => list.some(x => x.id === newPlayer.id) ? list : [...list, newPlayer]);
     }
 
     function renderSquadList() {
@@ -621,22 +660,21 @@
 
     function toggleAttendance(id) {
       const p = players.find(x => x.id === id);
-      if (p) {
-        p.attending = !p.attending;
-        rosterChanged();
-      }
+      if (!p) return;
+      const nowAttending = !p.attending;
+      updateRoster(list => {
+        const target = list.find(x => x.id === id);
+        if (target) target.attending = nowAttending;
+        return list;
+      });
     }
     function toggleAllAttendance(status) {
-      players.forEach(p => p.attending = status);
-      savePlayers();
-      renderSquadList();
-      balanceTeams();
+      updateRoster(list => { list.forEach(x => x.attending = status); return list; }, true);
     }
     function removePlayer(id) {
       const p = players.find(x => x.id === id);
       if (!p || !confirm(`Remove ${p.name} from the squad on every device?`)) return;
-      players = players.filter(x => x.id !== id);
-      rosterChanged();
+      updateRoster(list => list.filter(x => x.id !== id));
     }
 
     function openEditModal(id) {
@@ -673,12 +711,18 @@
       const rating = parseInt(document.getElementById('modal-player-rating').value, 10) || 5;
 
       if (!name) return;
-      p.name = name;
-      p.coach = coach;
-      p.rating = Math.max(1, Math.min(10, rating));
-      p.tags = orderedTags(modalSelectedTags);
+      const changes = {
+        name,
+        coach,
+        rating: Math.max(1, Math.min(10, rating)),
+        tags: orderedTags(modalSelectedTags)
+      };
       closeEditModal();
-      rosterChanged();
+      updateRoster(list => {
+        const target = list.find(x => x.id === id);
+        if (target) Object.assign(target, changes);
+        return list;
+      });
     }
 
     function setTeamCount(count) {
