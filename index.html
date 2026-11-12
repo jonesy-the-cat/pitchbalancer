@@ -344,7 +344,7 @@
     const OLD_POSITION_CODES = { Goalkeeper: 'GK', Defender: 'DEF', Midfield: 'MID', Winger: 'WIN', Striker: 'STR' };
     const TRAITS = ['Creative', 'Tackler', 'Pace', 'Development'];
     const SHARED_TRAITS = ['Creative', 'Tackler', 'Pace'];
-    const PRIMARY_COACHES = ['Ian', 'Mark', 'James', 'Craig'];
+    const KNOWN_COACHES = ['Ian', 'Mark', 'James', 'Craig'];   // suggestions in the coach box; every coach counts the same
     const COACHES_NEEDED = 2;
     const LOW_SCORE = 3;                 // players scored this or lower are shared equally
     const OUTFIELD = ['DEF', 'MID', 'WIN', 'STR'];
@@ -411,7 +411,6 @@
     function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
     function spread(arr) { return arr.length ? Math.max(...arr) - Math.min(...arr) : 0; }
     function sameName(a, b) { return String(a).trim().toLowerCase() === String(b).trim().toLowerCase(); }
-    function isPrimaryCoach(name) { return PRIMARY_COACHES.some(c => sameName(c, name)); }
     function toast(msg) {
       const t = document.getElementById('toast');
       t.textContent = msg; t.hidden = false;
@@ -676,7 +675,7 @@
     // Scores a set of teams as a list of numbers, most important first.
     // Lower is better; two line-ups are compared number by number.
     function evaluate(teams, coachRule) {
-      const totals = [], low = [], dev = [], primary = [];
+      const totals = [], low = [], dev = [], coachCounts = [];
       const traitCounts = { Creative: [], Tackler: [], Pace: [] };
       const strength = { GK: [], DEF: [], MID: [], WIN: [], STR: [] };
       let coachShort = 0, keeperMissing = 0, positionsMissing = 0;
@@ -686,7 +685,7 @@
         const covered = { DEF: false, MID: false, WIN: false, STR: false };
         const tc = { Creative: 0, Tackler: 0, Pace: 0 };
         const st = { GK: 0, DEF: 0, MID: 0, WIN: 0, STR: 0 };
-        const prim = new Set(), backup = new Set();
+        const coaches = new Set();
         for (const p of team) {
           total += p.rating;
           if (p.rating <= LOW_SCORE) lowN++;
@@ -697,7 +696,7 @@
             st[pos] += POSITION_WEIGHTS[rank] || 0.1;
           });
           for (const t of SHARED_TRAITS) if (p.traits.includes(t)) tc[t]++;
-          if (coachRule && p.coach) (isPrimaryCoach(p.coach) ? prim : backup).add(p.coach.trim().toLowerCase());
+          if (coachRule && p.coach) coaches.add(p.coach.trim().toLowerCase());
         }
         totals.push(total); low.push(lowN); dev.push(devN);
         if (!hasKeeper) keeperMissing++;
@@ -705,12 +704,12 @@
         for (const t of SHARED_TRAITS) traitCounts[t].push(tc[t]);
         for (const pos of POSITIONS) strength[pos].push(st[pos]);
         if (coachRule) {
-          coachShort += Math.max(0, COACHES_NEEDED - (prim.size + backup.size));
-          primary.push(prim.size);
+          coachShort += Math.max(0, COACHES_NEEDED - coaches.size);
+          coachCounts.push(coaches.size);
         }
       }
       let fine = POSITIONS.reduce((s, pos) => s + spread(strength[pos]), 0);
-      if (coachRule) fine += spread(primary);
+      if (coachRule) fine += spread(coachCounts);
       return [
         coachShort,                                                    // rule 2: coaches
         spread(totals),                                                // rule 3: ability
@@ -719,7 +718,7 @@
         keeperMissing,                                                 // rule 6: a keeper per team
         positionsMissing,                                              // rule 7: positions covered
         SHARED_TRAITS.reduce((s, t) => s + spread(traitCounts[t]), 0), // rule 8: Creative / Tackler / Pace
-        Math.round(fine * 10)                                          // tie-break: position strength, primary coaches
+        Math.round(fine * 10)                                          // tie-break: position strength, coaches spread
       ];
     }
     function compare(a, b) {
@@ -984,7 +983,7 @@
       document.getElementById('ed-coach').value = p ? p.coach : '';
       document.getElementById('ed-attending').checked = p ? p.attending : true;
       document.getElementById('ed-delete').hidden = !p;
-      const coaches = new Set([...PRIMARY_COACHES, ...Object.values(state.players).map(x => x.coach).filter(Boolean)]);
+      const coaches = new Set([...KNOWN_COACHES, ...Object.values(state.players).map(x => x.coach).filter(Boolean)]);
       document.getElementById('coach-names').innerHTML = [...coaches].map(c => `<option value="${esc(c)}">`).join('');
       renderEditorChips();
       document.getElementById('editor').showModal();
@@ -1352,7 +1351,7 @@
         <button class="sq ${p.attending ? '' : 'away'}" onclick="openEditor('${p.id}')">
           <span class="score ${p.rating <= LOW_SCORE ? 'low' : ''}">${p.rating}</span>
           <span>
-            <b>${esc(p.name)}</b>${p.coach ? ` <span class="coach-tag">👔 ${esc(p.coach)}${isPrimaryCoach(p.coach) ? '' : ' (backup)'}</span>` : ''}
+            <b>${esc(p.name)}</b>${p.coach ? ` <span class="coach-tag">👔 ${esc(p.coach)}</span>` : ''}
             <span class="meta">
               ${p.positions.map((pos, i) => `<span class="pos ${pos} ${i ? 'dim' : ''}">${i + 1}. ${pos}</span>`).join('') || '<span class="muted small">No positions set</span>'}
               ${p.traits.map(t => `<span class="trait ${t}">${t}</span>`).join('')}
