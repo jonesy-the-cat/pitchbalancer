@@ -149,6 +149,23 @@
     textarea.copybox { width: 100%; min-height: 220px; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 10px; padding: 10px; font: 13px/1.4 ui-monospace, Menlo, monospace; }
 
     .toast { position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 40; background: #e7edf7; color: #0b1220; padding: 10px 16px; border-radius: 12px; font-weight: 600; font-size: 14px; box-shadow: 0 10px 30px rgba(0,0,0,.4); max-width: calc(100vw - 32px); }
+    /* views, drag and drop */
+    .view-bar { justify-content: center; margin: 0 0 12px; }
+    .pl { cursor: pointer; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+    .pl.dragging { opacity: .35; }
+    .team.drop-target { border-color: var(--green); box-shadow: 0 0 0 3px rgba(34,197,94,.35); }
+    .touch-clone { position: fixed; z-index: 60; pointer-events: none; transform: translate(-50%, -60%) scale(1.04); background: var(--panel-2); border: 1px solid var(--green); border-radius: 10px; padding: 8px 12px; font-weight: 700; box-shadow: 0 14px 30px rgba(0,0,0,.5); white-space: nowrap; }
+    .hint { font-size: 11.5px; color: var(--muted); text-align: center; margin: 0; padding: 8px 14px 12px; }
+    .coach-line { margin-top: 6px; font-size: 13px; color: #c4b5fd; font-weight: 600; }
+    .plist.big .pl { padding: 9px 10px; }
+    .plist.big .nm { font-size: 19px; font-weight: 700; }
+    .wa-fields { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--line); }
+    .wa-f { display: grid; gap: 3px; font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; }
+    .wa-f.wide { grid-column: 1 / -1; }
+    .wa-f input { text-transform: none; letter-spacing: normal; font-weight: 600; color: var(--text); }
+    .wa-names { list-style: none; margin: 0; padding: 12px 16px; display: grid; gap: 8px; }
+    .wa-names li { font-size: 20px; font-weight: 700; display: flex; gap: 10px; align-items: center; }
+    .wa-names li::before { content: "•"; color: var(--green); }
   </style>
 </head>
 <body>
@@ -212,6 +229,13 @@
           <button id="pick-btn" class="btn primary pick-btn" onclick="pickNow()">Pick teams</button>
         </div>
 
+        <div id="view-bar" class="row view-bar" hidden>
+          <div class="seg" id="seg-view">
+            <button data-v="detailed" onclick="setView('detailed')">Detailed</button>
+            <button data-v="basic" onclick="setView('basic')">Basic</button>
+            <button data-v="whatsapp" onclick="setView('whatsapp')">WhatsApp</button>
+          </div>
+        </div>
         <div id="teams" class="teams"></div>
         <div id="copy-all-wrap" class="row" style="justify-content:center;margin:6px 0 20px" hidden>
           <button class="btn" onclick="copyText(whatsAppAll())">📋 Copy all teams for WhatsApp</button>
@@ -344,7 +368,7 @@
       players: {},          // id -> player
       playersLoaded: false,
       current: null,        // { count, event, teams: [[ids]], at }
-      teamInfo: {},         // t0 -> { name, venue, date, meetTime }
+      teamInfo: {},         // t0 -> { name, venue, date, warmUp, kickOff }
       history: [],
       online: false,
       connectedOnce: false,
@@ -352,7 +376,10 @@
       outdated: false,
       selected: null,       // player id chosen for moving
       count: 2,
-      event: 'match'
+      event: 'match',
+      view: (() => { try { return localStorage.getItem('pb_view') || 'detailed'; } catch (e) { return 'detailed'; } })(),
+      readError: false,
+      renderPending: false
     };
 
     let db = null;
@@ -598,7 +625,7 @@
         renderAll();
       }, onReadError);
 
-      ref('settings/teams').on('value', s => { state.teamInfo = s.val() || {}; renderTeams(); }, onReadError);
+      ref('settings/teams').on('value', s => { state.teamInfo = s.val() || {}; safeRenderTeams(); }, onReadError);
 
       ref('history').limitToLast(40).on('value', s => {
         const raw = s.val() || {};
@@ -608,6 +635,8 @@
     }
     function onReadError(err) {
       console.warn('Read failed', err);
+      state.readError = true;
+      renderStatus();
       const b = document.getElementById('offline-banner');
       document.getElementById('offline-text').textContent = "The database refused to share the squad. The database rules may need updating.";
       b.hidden = false;
@@ -834,10 +863,13 @@
       renderTeams(); renderMoveBar();
     }
     function clearSelection() { state.selected = null; renderTeams(); renderMoveBar(); }
-    function moveSelectedTo(teamIdx) {
+    function moveSelectedTo(teamIdx) { movePlayer(state.selected, teamIdx); }
+    function movePlayer(id, teamIdx) {
+      if (!id || !state.current) return;
       const teams = currentTeams().map(t => [...t]);
-      const id = state.selected;
-      teams.forEach(t => { const i = t.indexOf(id); if (i !== -1) t.splice(i, 1); });
+      const from = teams.findIndex(t => t.includes(id));
+      if (from === -1 || from === teamIdx || !teams[teamIdx]) return;
+      teams[from].splice(teams[from].indexOf(id), 1);
       teams[teamIdx].push(id);
       state.selected = null;
       write({ current: teamsForWrite(teams, state.current.count, state.current.event) });
@@ -854,7 +886,7 @@
     // Team names, venues, dates, meet times (saved for all devices)
     function teamInfo(i) {
       const t = state.teamInfo['t' + i] || {};
-      return { name: t.name || `Team ${i + 1}`, venue: t.venue || '', date: t.date || '', meetTime: t.meetTime || '' };
+      return { name: t.name || `Team ${i + 1}`, venue: t.venue || '', date: t.date || '', warmUp: t.warmUp || '', kickOff: t.kickOff || '' };
     }
     function saveTeamInfo(i, field, value) {
       write({ [`settings/teams/t${i}/${field}`]: value.trim().slice(0, 60) || null });
@@ -876,7 +908,8 @@
       let text = `*${info.name}* (${ps.length} players)\n`;
       text += `📍 *Venue:* ${info.venue || 'TBC'}\n`;
       text += `📅 *Date:* ${info.date || 'TBC'}\n`;
-      text += `⏰ *Meet Time:* ${info.meetTime || 'TBC'}\n`;
+      text += `🏃 *Warm-up:* ${info.warmUp || 'TBC'}\n`;
+      text += `⚽ *Kick-off:* ${info.kickOff || 'TBC'}\n`;
       text += `*Squad:*\n`;
       ps.forEach(p => { text += `• ${p.name}\n`; });
       return text;
@@ -1009,13 +1042,23 @@
       }
       if (name !== 'teams') clearSelection();
     }
-    function renderAll() { renderStatus(); renderAttendance(); renderControls(); renderTeams(); renderSquad(); renderHistory(); renderMoveBar(); }
+    function renderAll() { renderStatus(); renderAttendance(); renderControls(); safeRenderTeams(); renderSquad(); renderHistory(); renderMoveBar(); }
+    function typingInTeams() {
+      const a = document.activeElement;
+      return !!(a && a.matches && a.matches('#teams input'));
+    }
+    function safeRenderTeams() {
+      if (typingInTeams()) { state.renderPending = true; return; }
+      state.renderPending = false;
+      renderTeams();
+    }
 
     function renderStatus() {
       const el = document.getElementById('status');
       let cls = '', text = 'Connecting…';
       if (!db) { cls = 'bad'; text = "Can't connect"; }
       else if (state.outdated) { cls = 'bad'; text = 'Update needed'; }
+      else if (state.readError) { cls = 'bad'; text = 'Not connected'; }
       else if (!state.online && state.connectedOnce) { cls = 'busy'; text = state.pending ? `Offline · ${state.pending} waiting` : 'Offline'; }
       else if (state.online && state.pending) { cls = 'busy'; text = 'Saving…'; }
       else if (state.online) { cls = 'ok'; text = '✓ Saved'; }
@@ -1052,41 +1095,65 @@
       const firsts = p.positions.slice(0, 2).map((pos, i) => `<span class="pos ${pos} ${i ? 'dim' : ''}">${pos}</span>`).join('');
       const traits = p.traits.map(t => `<span class="trait ${t}">${t === 'Development' ? 'Dev' : t}</span>`).join('');
       const coach = p.coach ? `<span class="coach-tag" title="Coach">👔 ${esc(p.coach)}</span>` : '';
-      return `<li><button class="pl ${state.selected === p.id ? 'sel' : ''}" onclick="selectPlayer('${p.id}')">
+      return `<li><div class="pl ${state.selected === p.id ? 'sel' : ''}" role="button" tabindex="0" draggable="true" data-pid="${p.id}" onclick="tapPlayer('${p.id}')">
         <span class="score ${p.rating <= LOW_SCORE ? 'low' : ''}">${p.rating}</span>
         <span class="nm">${esc(p.name)}</span>${coach}${firsts}${traits}
-      </button></li>`;
+      </div></li>`;
+    }
+
+    function setView(v) {
+      state.view = v;
+      try { localStorage.setItem('pb_view', v); } catch (e) {}
+      if (v === 'whatsapp') state.selected = null;
+      renderTeams(); renderMoveBar();
     }
 
     function renderTeams() {
       const el = document.getElementById('teams');
       const copyWrap = document.getElementById('copy-all-wrap');
+      const viewBar = document.getElementById('view-bar');
       if (!state.current) {
         el.className = 'teams';
         el.innerHTML = state.playersLoaded && Object.keys(state.players).length
           ? '<div class="card empty">Tick who\'s playing, choose the options above and tap <b>Pick teams</b>.</div>' : '';
         copyWrap.hidden = true;
+        viewBar.hidden = true;
         return;
       }
+      viewBar.hidden = false;
+      for (const b of document.querySelectorAll('#seg-view button')) b.setAttribute('aria-pressed', String(b.dataset.v === state.view));
       const teams = currentTeams();
-      const coachRule = coachRuleApplies(state.current.count, state.current.event);
       el.className = 'teams n' + teams.length;
-      copyWrap.hidden = teams.length < 2;
-      el.innerHTML = teams.map((ids, i) => {
-        const info = teamInfo(i);
-        const ps = sortedTeamPlayers(ids);
-        const total = ps.reduce((s, p) => s + p.rating, 0);
-        const avg = ps.length ? (total / ps.length).toFixed(1) : '0';
-        const keeper = ps.some(p => p.positions.includes('GK'));
-        const lowN = ps.filter(p => p.rating <= LOW_SCORE).length;
-        const devN = ps.filter(p => p.traits.includes('Development')).length;
-        const coachNames = [...new Map(ps.filter(p => p.coach).map(p => [p.coach.toLowerCase(), p.coach])).values()];
-        let coachStat = '';
-        if (coachRule) {
-          coachStat = `<span class="stat ${coachNames.length >= COACHES_NEEDED ? 'good' : 'warn'}">👔 ${coachNames.length ? esc(coachNames.join(', ')) : 'No coach'}${coachNames.length < COACHES_NEEDED ? ' · needs ' + (COACHES_NEEDED - coachNames.length) + ' more' : ''}</span>`;
-        }
-        const canMoveHere = state.selected && !ids.includes(state.selected);
-        return `<article class="team ${canMoveHere ? 'drop' : ''}">
+      copyWrap.hidden = state.view !== 'whatsapp' && teams.length < 2;
+      const card = state.view === 'basic' ? basicCard : state.view === 'whatsapp' ? whatsAppCard : detailedCard;
+      el.innerHTML = teams.map((ids, i) => card(ids, i, teams)).join('');
+    }
+
+    function coachNamesOf(ps) {
+      return [...new Map(ps.filter(p => p.coach).map(p => [p.coach.toLowerCase(), p.coach])).values()];
+    }
+    function moveHereButton(ids, i) {
+      const canMoveHere = state.selected && !ids.includes(state.selected);
+      return canMoveHere ? `<div style="padding:8px 14px 0"><button class="btn primary sm" style="width:100%" onclick="moveSelectedTo(${i})">Move here</button></div>` : '';
+    }
+    const DRAG_HINT = '<p class="hint">Drag a player onto another team (press and hold first on a phone), or tap a player and choose a team.</p>';
+
+    function detailedCard(ids, i, teams) {
+      const info = teamInfo(i);
+      const ps = sortedTeamPlayers(ids);
+      const coachRule = coachRuleApplies(state.current.count, state.current.event);
+      const total = ps.reduce((s, p) => s + p.rating, 0);
+      const avg = ps.length ? (total / ps.length).toFixed(1) : '0';
+      const keeper = ps.some(p => p.positions.includes('GK'));
+      const lowN = ps.filter(p => p.rating <= LOW_SCORE).length;
+      const devN = ps.filter(p => p.traits.includes('Development')).length;
+      const coachNames = coachNamesOf(ps);
+      let coachStat = '';
+      if (coachRule) {
+        coachStat = `<span class="stat ${coachNames.length >= COACHES_NEEDED ? 'good' : 'warn'}">👔 ${coachNames.length ? esc(coachNames.join(', ')) : 'No coach'}${coachNames.length < COACHES_NEEDED ? ' · needs ' + (COACHES_NEEDED - coachNames.length) + ' more' : ''}</span>`;
+      }
+      const summary = [info.date, info.venue, info.warmUp && 'Warm-up ' + info.warmUp, info.kickOff && 'KO ' + info.kickOff].filter(Boolean).join(' · ');
+      return `<article class="team ${state.selected && !ids.includes(state.selected) ? 'drop' : ''}" data-team="${i}">
           <div class="team-head">
             <input class="team-name" value="${esc(info.name)}" maxlength="40" aria-label="Team name" onchange="saveTeamInfo(${i}, 'name', this.value)">
             <div class="stats">
@@ -1099,18 +1166,165 @@
             </div>
           </div>
           <details class="team-info">
-            <summary>${info.venue || info.date || info.meetTime ? esc([info.date, info.venue, info.meetTime].filter(Boolean).join(' · ')) : 'Add date, venue and meet time'}</summary>
+            <summary>${summary ? esc(summary) : 'Add location, date, warm-up and kick-off'}</summary>
             <div class="info-grid">
+              <label>Location / pitch<input class="field" value="${esc(info.venue)}" placeholder="e.g. Danescourt, Pitch 2" onchange="saveTeamInfo(${i}, 'venue', this.value)"></label>
               <label>Date<input class="field" value="${esc(info.date)}" placeholder="e.g. Sat 15 Nov" onchange="saveTeamInfo(${i}, 'date', this.value)"></label>
-              <label>Venue<input class="field" value="${esc(info.venue)}" placeholder="e.g. Danescourt pitch 1" onchange="saveTeamInfo(${i}, 'venue', this.value)"></label>
-              <label>Meet time<input class="field" value="${esc(info.meetTime)}" placeholder="e.g. 9:30 (10:00 KO)" onchange="saveTeamInfo(${i}, 'meetTime', this.value)"></label>
+              <label>Warm-up starts<input class="field" value="${esc(info.warmUp)}" placeholder="e.g. 9:30" onchange="saveTeamInfo(${i}, 'warmUp', this.value)"></label>
+              <label>Kick-off<input class="field" value="${esc(info.kickOff)}" placeholder="e.g. 10:00" onchange="saveTeamInfo(${i}, 'kickOff', this.value)"></label>
             </div>
           </details>
-          ${canMoveHere ? `<div style="padding:8px 14px 0"><button class="btn primary sm" style="width:100%" onclick="moveSelectedTo(${i})">Move here</button></div>` : ''}
+          ${moveHereButton(ids, i)}
           <ul class="plist">${ps.map(p => playerRow(p, i)).join('')}</ul>
+          ${teams.length > 1 ? DRAG_HINT : ''}
           <div class="team-foot"><button class="btn sm" onclick="copyText(teamMessage(${i}, currentTeams()[${i}]))">📋 Copy for WhatsApp</button></div>
         </article>`;
-      }).join('');
+    }
+
+    function basicCard(ids, i, teams) {
+      const info = teamInfo(i);
+      const ps = sortedTeamPlayers(ids);
+      const coachNames = coachNamesOf(ps);
+      return `<article class="team ${state.selected && !ids.includes(state.selected) ? 'drop' : ''}" data-team="${i}">
+          <div class="team-head">
+            <input class="team-name" value="${esc(info.name)}" maxlength="40" aria-label="Team name" onchange="saveTeamInfo(${i}, 'name', this.value)">
+            <div class="stats"><span class="stat">${ps.length} players</span></div>
+            <div class="coach-line">👔 Coaches: ${coachNames.length ? esc(coachNames.join(', ')) : '<span class="muted">none in this team</span>'}</div>
+          </div>
+          ${moveHereButton(ids, i)}
+          <ul class="plist big">${ps.map(p => `<li><div class="pl ${state.selected === p.id ? 'sel' : ''}" role="button" tabindex="0" draggable="true" data-pid="${p.id}" onclick="tapPlayer('${p.id}')"><span class="nm">${esc(p.name)}</span></div></li>`).join('')}</ul>
+          ${teams.length > 1 ? DRAG_HINT : ''}
+        </article>`;
+    }
+
+    function whatsAppCard(ids, i) {
+      const info = teamInfo(i);
+      const ps = sortedTeamPlayers(ids);
+      return `<article class="team" data-team="${i}">
+          <div class="team-head">
+            <input class="team-name" value="${esc(info.name)}" maxlength="40" aria-label="Team name" onchange="saveTeamInfo(${i}, 'name', this.value)">
+            <div class="stats"><span class="stat">${ps.length} players</span></div>
+          </div>
+          <div class="wa-fields">
+            <label class="wa-f wide">📍 Location / pitch<input class="field" value="${esc(info.venue)}" placeholder="e.g. Danescourt, Pitch 2" onchange="saveTeamInfo(${i}, 'venue', this.value)"></label>
+            <label class="wa-f">📅 Date<input class="field" value="${esc(info.date)}" placeholder="Sat 15 Nov" onchange="saveTeamInfo(${i}, 'date', this.value)"></label>
+            <label class="wa-f">🏃 Warm-up<input class="field" value="${esc(info.warmUp)}" placeholder="9:30" onchange="saveTeamInfo(${i}, 'warmUp', this.value)"></label>
+            <label class="wa-f">⚽ Kick-off<input class="field" value="${esc(info.kickOff)}" placeholder="10:00" onchange="saveTeamInfo(${i}, 'kickOff', this.value)"></label>
+          </div>
+          <ul class="wa-names">${ps.map(p => `<li>${esc(p.name)}</li>`).join('')}</ul>
+          <div class="team-foot"><button class="btn sm" onclick="copyText(teamMessage(${i}, currentTeams()[${i}]))">📋 Copy ${esc(info.name)}</button></div>
+        </article>`;
+    }
+
+    // ---------- drag and drop ----------
+    let dragId = null;
+    let suppressClickUntil = 0;
+    function tapPlayer(id) {
+      if (Date.now() < suppressClickUntil) return;
+      selectPlayer(id);
+    }
+    function teamIndexOf(id) { return currentTeams().findIndex(t => t.includes(id)); }
+    function clearDropMarks() {
+      document.querySelectorAll('.team.drop-target').forEach(el => el.classList.remove('drop-target'));
+    }
+    function markDrop(target) {
+      clearDropMarks();
+      const card = target && target.closest && target.closest('#teams [data-team]');
+      if (card && Number(card.dataset.team) !== teamIndexOf(dragId)) card.classList.add('drop-target');
+    }
+    function dropOn(target, id) {
+      const card = target && target.closest && target.closest('#teams [data-team]');
+      if (!card) return;
+      movePlayer(id, Number(card.dataset.team));
+    }
+    function setupDragAndDrop() {
+      const teamsEl = document.getElementById('teams');
+      // Mouse (computer)
+      teamsEl.addEventListener('dragstart', e => {
+        const row = e.target.closest && e.target.closest('[data-pid]');
+        if (!row) return;
+        dragId = row.dataset.pid;
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', dragId);
+        row.classList.add('dragging');
+      });
+      teamsEl.addEventListener('dragend', () => { dragId = null; clearDropMarks(); document.querySelectorAll('.pl.dragging').forEach(el => el.classList.remove('dragging')); });
+      teamsEl.addEventListener('dragover', e => {
+        if (!dragId) return;
+        if (e.target.closest && e.target.closest('#teams [data-team]')) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; markDrop(e.target); }
+      });
+      teamsEl.addEventListener('drop', e => {
+        if (!dragId) return;
+        e.preventDefault();
+        const id = dragId; dragId = null; clearDropMarks();
+        dropOn(e.target, id);
+      });
+
+      // Touch (phone): press and hold, then drag. A quick swipe still scrolls.
+      let holdTimer = null, start = null, candidate = null, clone = null, lastTouch = null, scrollLoop = null;
+      // While dragging near the top or bottom of the screen, scroll so you can reach every team
+      const autoScroll = () => {
+        if (!dragId || !lastTouch) { scrollLoop = null; return; }
+        const edge = 90, h = window.innerHeight, y = lastTouch.y;
+        let dy = 0;
+        if (y < edge) dy = -Math.ceil((edge - y) / 5);
+        else if (y > h - edge) dy = Math.ceil((y - (h - edge)) / 5);
+        if (dy) { window.scrollBy(0, dy); markDrop(document.elementFromPoint(lastTouch.x, lastTouch.y)); }
+        scrollLoop = requestAnimationFrame(autoScroll);
+      };
+      const cancel = () => {
+        clearTimeout(holdTimer); holdTimer = null;
+        if (scrollLoop) cancelAnimationFrame(scrollLoop); scrollLoop = null; lastTouch = null;
+        if (clone) { clone.remove(); clone = null; }
+        document.querySelectorAll('.pl.dragging').forEach(el => el.classList.remove('dragging'));
+        clearDropMarks();
+        candidate = null; dragId = null;
+      };
+      teamsEl.addEventListener('touchstart', e => {
+        const row = e.target.closest && e.target.closest('[data-pid]');
+        if (!row || e.touches.length > 1) return;
+        candidate = row;
+        start = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+        clearTimeout(holdTimer);
+        holdTimer = setTimeout(() => {
+          if (!candidate) return;
+          dragId = candidate.dataset.pid;
+          candidate.classList.add('dragging');
+          clone = document.createElement('div');
+          clone.className = 'touch-clone';
+          clone.textContent = (state.players[dragId] || {}).name || '';
+          clone.style.left = start.x + 'px'; clone.style.top = start.y + 'px';
+          document.body.appendChild(clone);
+          lastTouch = { x: start.x, y: start.y };
+          scrollLoop = requestAnimationFrame(autoScroll);
+          if (navigator.vibrate) navigator.vibrate(15);
+        }, 320);
+      }, { passive: true });
+      document.addEventListener('touchmove', e => {
+        const t = e.touches[0];
+        if (!dragId) {
+          if (candidate && start && Math.hypot(t.clientX - start.x, t.clientY - start.y) > 10) cancel();
+          return;
+        }
+        e.preventDefault();
+        lastTouch = { x: t.clientX, y: t.clientY };
+        clone.style.left = t.clientX + 'px'; clone.style.top = t.clientY + 'px';
+        markDrop(document.elementFromPoint(t.clientX, t.clientY));
+      }, { passive: false });
+      document.addEventListener('touchend', e => {
+        if (!dragId) { clearTimeout(holdTimer); candidate = null; return; }
+        const t = e.changedTouches[0];
+        if (clone) clone.style.display = 'none';
+        const target = document.elementFromPoint(t.clientX, t.clientY);
+        const id = dragId;
+        cancel();
+        suppressClickUntil = Date.now() + 500;
+        dropOn(target, id);
+      });
+      document.addEventListener('touchcancel', cancel);
+      teamsEl.addEventListener('contextmenu', e => { if (e.target.closest && e.target.closest('[data-pid]')) e.preventDefault(); });
+      // When you finish typing in a team card, catch up on any changes that arrived meanwhile
+      teamsEl.addEventListener('focusout', () => setTimeout(() => { if (state.renderPending && !typingInTeams()) safeRenderTeams(); }, 0));
     }
 
     function renderMoveBar() {
@@ -1167,6 +1381,7 @@
     }
 
     window.addEventListener('keydown', e => { if (e.key === 'Escape' && state.selected) clearSelection(); });
+    setupDragAndDrop();
     init();
   </script>
 </body>
