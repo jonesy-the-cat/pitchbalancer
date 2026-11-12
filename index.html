@@ -1,239 +1,332 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en-GB">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0b1220">
   <title>PitchBalancer</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-
-  <!-- Firebase Compatibility Scripts -->
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
-
   <style>
-    body { font-family: 'Inter', sans-serif; -webkit-tap-highlight-color: transparent; }
-    .dragging { opacity: 0.35; transform: scale(0.98); }
-    .drag-over { background-color: rgba(16, 185, 129, 0.08); border-color: #10b981 !important; }
-    .drag-target-player { border-color: #38bdf8 !important; background-color: rgba(56, 189, 248, 0.1) !important; }
-    .touch-card { -webkit-touch-callout: none; }
-    .touch-clone {
-      position: fixed;
-      pointer-events: none;
-      z-index: 9999;
-      opacity: 0.85;
-      transform: translate(-50%, -50%) scale(1.03);
-      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
+    :root {
+      --bg: #0b1220;
+      --panel: #121b2d;
+      --panel-2: #172238;
+      --line: #24324d;
+      --text: #e7edf7;
+      --muted: #8d9bb5;
+      --green: #22c55e;
+      --green-ink: #062814;
+      --amber: #f5b23d;
+      --red: #f2555a;
+      --blue: #60a5fa;
+      --radius: 14px;
+      --gk: #f5b23d; --def: #60a5fa; --mid: #34d399; --win: #22d3ee; --str: #fb7185;
     }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; background: var(--bg); color: var(--text); }
+    body {
+      font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      -webkit-tap-highlight-color: transparent;
+      padding-bottom: calc(90px + env(safe-area-inset-bottom));
+    }
+    button, input, select { font: inherit; color: inherit; }
+    button { cursor: pointer; }
+    [hidden] { display: none !important; }
+
+    .wrap { max-width: 1180px; margin: 0 auto; padding: 0 16px; }
+    header.top {
+      position: sticky; top: 0; z-index: 20;
+      background: rgba(11, 18, 32, .92); backdrop-filter: blur(8px);
+      border-bottom: 1px solid var(--line);
+    }
+    .top-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; height: 56px; }
+    .brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 18px; letter-spacing: -.01em; }
+    .brand-mark { width: 30px; height: 30px; border-radius: 9px; background: var(--green); color: var(--green-ink); display: grid; place-items: center; font-size: 17px; }
+    .status { font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
+    .status.ok { color: #86efac; border-color: #1f5135; background: #0d2418; }
+    .status.busy { color: #fcd58a; border-color: #5a4316; background: #2a1f0a; }
+    .status.bad { color: #fca5a5; border-color: #5c2226; background: #2a0f12; }
+
+    .tabs { display: flex; gap: 4px; padding-bottom: 10px; }
+    .tab { flex: 1; max-width: 200px; padding: 8px 12px; border-radius: 10px; border: 1px solid transparent; background: none; color: var(--muted); font-weight: 600; }
+    .tab[aria-selected="true"] { background: var(--panel-2); border-color: var(--line); color: var(--text); }
+
+    .banner { background: #2a0f12; border: 1px solid #5c2226; color: #fecaca; border-radius: var(--radius); padding: 12px 14px; margin: 14px 0 0; display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+
+    main { padding-top: 14px; }
+    .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; margin-bottom: 14px; }
+    .card h2 { margin: 0; font-size: 15px; }
+    .card-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+    .muted { color: var(--muted); }
+    .small { font-size: 12.5px; }
+    .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+    .btn { border: 1px solid var(--line); background: var(--panel-2); border-radius: 10px; padding: 8px 12px; font-weight: 600; font-size: 14px; }
+    .btn:hover { border-color: #3a4c70; }
+    .btn.primary { background: var(--green); border-color: var(--green); color: var(--green-ink); }
+    .btn.primary:hover { filter: brightness(1.08); }
+    .btn.danger { color: #fca5a5; border-color: #5c2226; background: #1d0d10; }
+    .btn.ghost { background: none; }
+    .btn.sm { padding: 5px 9px; font-size: 13px; border-radius: 8px; }
+    .btn:disabled { opacity: .45; cursor: not-allowed; }
+    .link { background: none; border: 0; padding: 0; color: var(--blue); font-weight: 600; font-size: 13px; }
+
+    .seg { display: inline-flex; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 3px; }
+    .seg button { border: 0; background: none; padding: 6px 12px; border-radius: 7px; font-weight: 700; font-size: 13.5px; color: var(--muted); }
+    .seg button[aria-pressed="true"] { background: var(--green); color: var(--green-ink); }
+    .controls { display: grid; gap: 12px; }
+    .control { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+    .control label { font-weight: 600; font-size: 13.5px; color: var(--muted); }
+    .pick-btn { width: 100%; padding: 12px; font-size: 16px; }
+    .rule-note { font-size: 12.5px; color: var(--muted); margin: 0; }
+
+    .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+    .chip { border: 1px solid var(--line); background: var(--bg); border-radius: 999px; padding: 6px 11px; font-size: 13.5px; font-weight: 600; color: var(--muted); }
+    .chip.on { background: #0d2418; border-color: #1f5135; color: #bbf7d0; }
+
+    .teams { display: grid; gap: 14px; grid-template-columns: 1fr; }
+    @media (min-width: 720px) { .teams.n2, .teams.n3, .teams.n4 { grid-template-columns: repeat(2, 1fr); } }
+    @media (min-width: 1100px) { .teams.n3 { grid-template-columns: repeat(3, 1fr); } .teams.n4 { grid-template-columns: repeat(4, 1fr); } }
+    .team { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; display: flex; flex-direction: column; }
+    .team.drop { border-color: var(--green); box-shadow: 0 0 0 2px rgba(34,197,94,.25); }
+    .team-head { padding: 12px 14px 10px; border-bottom: 1px solid var(--line); background: var(--panel-2); }
+    .team-name { width: 100%; background: none; border: 0; font-weight: 800; font-size: 17px; padding: 2px 0; border-bottom: 1px dashed transparent; }
+    .team-name:focus { outline: none; border-bottom-color: var(--muted); }
+    .stats { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+    .stat { font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--bg); border: 1px solid var(--line); color: var(--muted); }
+    .stat.warn { color: #fcd58a; border-color: #5a4316; background: #2a1f0a; }
+    .stat.good { color: #86efac; border-color: #1f5135; background: #0d2418; }
+    details.team-info { padding: 8px 14px; border-bottom: 1px solid var(--line); font-size: 13px; }
+    details.team-info summary { cursor: pointer; color: var(--muted); font-weight: 600; }
+    .info-grid { display: grid; grid-template-columns: 1fr; gap: 6px; margin-top: 8px; }
+    .info-grid label { display: grid; gap: 2px; font-size: 12px; color: var(--muted); }
+    input.field, select.field { width: 100%; background: var(--bg); border: 1px solid var(--line); border-radius: 9px; padding: 8px 10px; }
+    input.field:focus { outline: 2px solid rgba(96,165,250,.45); border-color: var(--blue); }
+    .plist { list-style: none; margin: 0; padding: 6px; display: grid; gap: 4px; }
+    .pl { display: flex; align-items: center; gap: 8px; padding: 7px 8px; border-radius: 10px; border: 1px solid transparent; background: none; width: 100%; text-align: left; }
+    .pl:hover { background: var(--panel-2); }
+    .pl.sel { border-color: var(--green); background: #0d2418; }
+    .pl .nm { font-weight: 600; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .score { min-width: 26px; height: 22px; border-radius: 7px; display: inline-grid; place-items: center; font-size: 12px; font-weight: 800; background: var(--bg); border: 1px solid var(--line); }
+    .score.low { color: #fcd58a; border-color: #5a4316; }
+    .pos { font-size: 10.5px; font-weight: 800; padding: 1px 6px; border-radius: 6px; border: 1px solid currentColor; letter-spacing: .02em; }
+    .pos.GK { color: var(--gk); } .pos.DEF { color: var(--def); } .pos.MID { color: var(--mid); } .pos.WIN { color: var(--win); } .pos.STR { color: var(--str); }
+    .pos.dim { opacity: .55; }
+    .trait { font-size: 10.5px; font-weight: 700; padding: 1px 6px; border-radius: 6px; background: var(--panel-2); color: var(--muted); }
+    .trait.Development { color: #fcd58a; }
+    .coach-tag { font-size: 11px; color: #c4b5fd; }
+    .team-foot { margin-top: auto; padding: 10px 14px; border-top: 1px solid var(--line); display: flex; justify-content: flex-end; }
+    .empty { text-align: center; padding: 26px 14px; color: var(--muted); }
+
+    .movebar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; background: var(--panel-2); border-top: 1px solid var(--line); padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); }
+    .movebar .wrap { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 0; }
+
+    .squad-list { display: grid; gap: 6px; }
+    .sq { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: center; padding: 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg); width: 100%; text-align: left; }
+    .sq:hover { border-color: #3a4c70; }
+    .sq .meta { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 3px; }
+    .sq.away { opacity: .55; }
+    .hist { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+    .hist li { display: flex; gap: 10px; align-items: center; justify-content: space-between; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); font-size: 13.5px; }
+    .hist time { color: var(--muted); font-size: 12px; display: block; }
+    .hist .undone { color: var(--muted); text-decoration: line-through; }
+
+    dialog { border: 1px solid var(--line); background: var(--panel); color: var(--text); border-radius: 18px; padding: 0; width: min(520px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); }
+    dialog::backdrop { background: rgba(0,0,0,.6); }
+    .dlg-body { padding: 16px; display: grid; gap: 14px; overflow-y: auto; }
+    .dlg-body h3 { margin: 0; font-size: 17px; }
+    .dlg-foot { padding: 12px 16px; border-top: 1px solid var(--line); display: flex; gap: 8px; justify-content: space-between; flex-wrap: wrap; }
+    .fl { display: grid; gap: 5px; }
+    .fl > span { font-size: 12.5px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+    .stepper { display: flex; align-items: center; gap: 8px; }
+    .stepper output { min-width: 42px; text-align: center; font-size: 20px; font-weight: 800; }
+    .poschip { border: 1px solid var(--line); background: var(--bg); border-radius: 10px; padding: 7px 10px; font-weight: 700; font-size: 13.5px; color: var(--muted); display: inline-flex; align-items: center; gap: 6px; }
+    .poschip.on { color: var(--text); border-color: var(--green); background: #0d2418; }
+    .poschip .n { width: 18px; height: 18px; border-radius: 50%; background: var(--green); color: var(--green-ink); font-size: 11px; display: grid; place-items: center; }
+    .check { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+    .check input { width: 18px; height: 18px; accent-color: var(--green); }
+    textarea.copybox { width: 100%; min-height: 220px; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 10px; padding: 10px; font: 13px/1.4 ui-monospace, Menlo, monospace; }
+
+    .toast { position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 40; background: #e7edf7; color: #0b1220; padding: 10px 16px; border-radius: 12px; font-weight: 600; font-size: 14px; box-shadow: 0 10px 30px rgba(0,0,0,.4); max-width: calc(100vw - 32px); }
   </style>
 </head>
-<body class="bg-slate-950 text-slate-100 min-h-screen">
-  <div class="max-w-7xl mx-auto px-3 sm:px-4 py-6 sm:py-8">
-
-    <!-- Header -->
-    <header class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 mb-6 sm:mb-8 border-b border-slate-800">
-      <div class="flex items-center gap-3">
-        <div class="h-10 w-10 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 font-bold text-xl shadow-lg shadow-emerald-500/10 shrink-0">
-          ⚽
-        </div>
-        <div>
-          <div class="flex items-center gap-2">
-            <h1 class="text-xl sm:text-2xl font-extrabold tracking-tight text-white">PitchBalancer</h1>
-            <span id="sync-status" class="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 font-medium">Connecting...</span>
-          </div>
-          <p class="text-xs text-slate-400">Position, ability & coach squad balancer</p>
-        </div>
+<body>
+  <header class="top">
+    <div class="wrap">
+      <div class="top-row">
+        <div class="brand"><span class="brand-mark" aria-hidden="true">⚽</span>PitchBalancer</div>
+        <span id="status" class="status">Connecting…</span>
       </div>
-      <div class="flex items-center gap-2 flex-wrap">
-        <button onclick="openSyncModal()" class="px-3 py-1.5 text-xs font-semibold bg-indigo-600/20 border border-indigo-500/40 text-indigo-300 rounded-lg hover:bg-indigo-600/30 hover:text-white transition flex items-center gap-1.5">
-          <span>🔄</span> Backup / Sync
-        </button>
-        <button onclick="resetToImportedDefault()" class="px-3 py-1.5 text-xs font-semibold bg-slate-900 border border-slate-700 text-slate-300 rounded-lg hover:bg-slate-800 hover:text-white transition">
-          Reset Default
-        </button>
-      </div>
-    </header>
+      <nav class="tabs" role="tablist">
+        <button class="tab" role="tab" id="tab-btn-teams" aria-selected="true" onclick="showTab('teams')">Pick teams</button>
+        <button class="tab" role="tab" id="tab-btn-squad" aria-selected="false" onclick="showTab('squad')">Squad</button>
+      </nav>
+    </div>
+  </header>
 
-    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 sm:gap-8">
+  <div class="wrap">
+    <div id="update-banner" class="banner" hidden>
+      <span>This copy of the app is out of date, so changes are switched off until you reload.</span>
+      <button class="btn sm" onclick="location.reload()">Reload now</button>
+    </div>
+    <div id="offline-banner" class="banner" hidden>
+      <span id="offline-text">Can't reach the database. Check your internet connection.</span>
+    </div>
 
-      <!-- Squad & Attendance Section -->
-      <section class="lg:col-span-5 flex flex-col gap-4">
-        <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-xl">
-
-          <div class="flex items-center justify-between mb-4">
-            <div>
-              <h2 class="text-base sm:text-lg font-bold text-white">Squad Attendance</h2>
-              <p class="text-xs text-slate-400 mt-0.5">
-                Attending: <span id="attending-count" class="font-bold text-emerald-400">0</span> / <span id="total-count">0</span>
-              </p>
-            </div>
-            <div class="flex gap-2">
-              <button onclick="toggleAllAttendance(true)" class="text-xs px-2.5 sm:px-3 py-1.5 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 rounded-lg transition font-semibold">
-                ✓ All
-              </button>
-              <button onclick="toggleAllAttendance(false)" class="text-xs px-2.5 sm:px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 border border-slate-700 rounded-lg transition font-medium">
-                ✕ None
-              </button>
+    <main>
+      <!-- PICK TEAMS -->
+      <section id="tab-teams">
+        <div class="card">
+          <div class="card-head">
+            <h2>Who's playing? <span id="attend-count" class="muted small"></span></h2>
+            <div class="row">
+              <button class="link" onclick="setAllAttending(true)">All</button>
+              <span class="muted">·</span>
+              <button class="link" onclick="setAllAttending(false)">None</button>
             </div>
           </div>
+          <div id="attend-chips" class="chips"></div>
+          <p class="rule-note" style="margin-top:8px">Tap a name to mark them in or out.</p>
+        </div>
 
-          <!-- Add Player -->
-          <div class="bg-slate-950/70 border border-slate-800 rounded-xl p-3 mb-4">
-            <span class="text-[11px] font-bold tracking-wider uppercase text-slate-400 block mb-2">Add Player</span>
-            <div class="flex gap-2 mb-2">
-              <input id="quick-name" type="text" placeholder="Name..." class="bg-slate-900 border border-slate-700/80 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-emerald-500 flex-1 min-w-0">
-              <input id="quick-rating" type="number" min="1" max="10" value="5" class="bg-slate-900 border border-slate-700/80 rounded-lg px-2 py-1.5 text-sm text-center text-white w-14 focus:outline-none focus:border-emerald-500" title="Ability">
-              <button onclick="addQuickPlayer()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs px-3 rounded-lg transition shadow">Add</button>
+        <div class="card controls">
+          <div class="control">
+            <label>What for?</label>
+            <div class="seg" id="seg-event">
+              <button data-v="match" onclick="setEvent('match')">Match</button>
+              <button data-v="training" onclick="setEvent('training')">Training</button>
+              <button data-v="festival" onclick="setEvent('festival')">Festival</button>
             </div>
-            <div class="mb-2">
-              <input id="quick-coach" type="text" placeholder="Coach/Dad (optional, e.g. Leon as backup)..." class="w-full bg-slate-900 border border-slate-700/80 rounded-lg px-3 py-1 text-xs text-white focus:outline-none focus:border-emerald-500">
+          </div>
+          <div class="control">
+            <label>How many teams?</label>
+            <div class="seg" id="seg-count">
+              <button data-v="1" onclick="setCount(1)">1</button>
+              <button data-v="2" onclick="setCount(2)">2</button>
+              <button data-v="3" onclick="setCount(3)">3</button>
+              <button data-v="4" onclick="setCount(4)">4</button>
             </div>
-            <div class="flex flex-wrap gap-1" id="quick-add-tags"></div>
           </div>
+          <p id="rule-note" class="rule-note"></p>
+          <button id="pick-btn" class="btn primary pick-btn" onclick="pickNow()">Pick teams</button>
+        </div>
 
-          <!-- Search -->
-          <div class="mb-3">
-            <input id="player-search" oninput="renderSquadList()" type="text" placeholder="Search roster by name, coach, or tag..." class="w-full bg-slate-950/60 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-300 focus:outline-none focus:border-slate-600">
-          </div>
-
-          <!-- List -->
-          <div id="players-container" class="space-y-2 max-h-[420px] sm:max-h-[500px] overflow-y-auto pr-1"></div>
+        <div id="teams" class="teams"></div>
+        <div id="copy-all-wrap" class="row" style="justify-content:center;margin:6px 0 20px" hidden>
+          <button class="btn" onclick="copyText(whatsAppAll())">📋 Copy all teams for WhatsApp</button>
         </div>
       </section>
 
-      <!-- Teams & Controls -->
-      <section class="lg:col-span-7 flex flex-col gap-5">
-
-        <!-- Controls Bar -->
-        <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-3.5 sm:p-4 shadow-xl flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-          <div class="flex items-center gap-1 bg-slate-950 p-1 border border-slate-800 rounded-xl justify-center sm:justify-start">
-            <button onclick="setActiveView('detailed')" id="view-tab-detailed" class="flex-1 sm:flex-none px-3 py-1.5 rounded-lg text-xs font-bold transition bg-emerald-600 text-white shadow">
-              Detailed
-            </button>
-            <button onclick="setActiveView('basic')" id="view-tab-basic" class="flex-1 sm:flex-none px-3 py-1.5 rounded-lg text-xs font-bold transition text-slate-400 hover:text-white">
-              Basic
-            </button>
-            <button onclick="setActiveView('whatsapp')" id="view-tab-whatsapp" class="flex-1 sm:flex-none px-3 py-1.5 rounded-lg text-xs font-bold transition text-slate-400 hover:text-white flex items-center justify-center gap-1">
-              <span>💬</span> WhatsApp
-            </button>
+      <!-- SQUAD -->
+      <section id="tab-squad" hidden>
+        <div class="card">
+          <div class="card-head">
+            <h2>Squad <span id="squad-count" class="muted small"></span></h2>
+            <button class="btn primary sm" onclick="openEditor(null)">+ Add player</button>
           </div>
-
-          <div class="flex items-center gap-2 justify-between sm:justify-end">
-            <div class="inline-flex rounded-lg bg-slate-950 p-1 border border-slate-800">
-              <button onclick="setTeamCount(1)" id="btn-team-1" class="px-3 py-1 rounded-md text-xs font-bold transition text-slate-400 hover:text-white">1</button>
-              <button onclick="setTeamCount(2)" id="btn-team-2" class="px-3 py-1 rounded-md text-xs font-bold transition bg-emerald-600 text-white shadow">2</button>
-              <button onclick="setTeamCount(3)" id="btn-team-3" class="px-3 py-1 rounded-md text-xs font-bold transition text-slate-400 hover:text-white">3</button>
-              <button onclick="setTeamCount(4)" id="btn-team-4" class="px-3 py-1 rounded-md text-xs font-bold transition text-slate-400 hover:text-white">4</button>
-            </div>
-            <button onclick="balanceTeams()" class="bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white text-xs font-semibold px-4 py-2 rounded-xl shadow-md transition">
-              ⚡ Re-pick
-            </button>
-          </div>
+          <input id="search" class="field" type="search" placeholder="Search players…" oninput="renderSquad()" style="margin-bottom:10px">
+          <div id="squad-list" class="squad-list"></div>
         </div>
 
-        <!-- Output View Container -->
-        <div id="teams-output-container"></div>
+        <div class="card">
+          <div class="card-head">
+            <h2>Recent changes</h2>
+            <span class="muted small">Undo puts a player back how they were</span>
+          </div>
+          <ul id="history" class="hist"></ul>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><h2>Backup</h2></div>
+          <p class="muted small" style="margin-top:0">Download a copy of the squad now and then. Importing a file replaces the whole squad (you can undo it from Recent changes).</p>
+          <div class="row">
+            <button class="btn" onclick="downloadBackup()">⬇ Download backup</button>
+            <button class="btn" onclick="document.getElementById('import-file').click()">⬆ Import backup file</button>
+            <input id="import-file" type="file" accept=".json,application/json" hidden onchange="importFile(event)">
+          </div>
+        </div>
       </section>
+    </main>
+  </div>
+
+  <div id="movebar" class="movebar" hidden>
+    <div class="wrap">
+      <span id="move-text" style="font-weight:600"></span>
+      <span id="move-buttons" class="row"></span>
+      <button class="btn ghost sm" onclick="clearSelection()">Cancel</button>
     </div>
   </div>
 
-  <!-- Mobile Transfer Modal -->
-  <div id="transfer-modal" class="fixed inset-0 bg-slate-950/85 backdrop-blur-sm flex items-center justify-center p-4 z-50 hidden">
-    <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-sm w-full p-5 shadow-2xl">
-      <div class="flex items-center justify-between pb-3 border-b border-slate-800 mb-3">
-        <h3 class="text-sm font-bold text-white flex items-center gap-2">
-          <span>⇄</span> Move <span id="transfer-player-name" class="text-emerald-400 font-bold"></span>
-        </h3>
-        <button onclick="closeTransferModal()" class="text-slate-400 hover:text-white text-sm">✕</button>
-      </div>
-      <p class="text-xs text-slate-400 mb-4">Select destination team:</p>
-      <div id="transfer-teams-list" class="space-y-2"></div>
-    </div>
-  </div>
-
-  <!-- Sync Modal -->
-  <div id="sync-modal" class="fixed inset-0 bg-slate-950/85 backdrop-blur-sm flex items-center justify-center p-4 z-50 hidden">
-    <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-5 sm:p-6 shadow-2xl">
-      <div class="flex items-center justify-between pb-3 border-b border-slate-800 mb-4">
-        <div>
-          <h3 class="text-sm sm:text-base font-bold text-white flex items-center gap-2">
-            <span>🔄</span> Sync Squad Between Devices
-          </h3>
-          <p class="text-xs text-slate-400 mt-0.5">Transfer between phone and PC</p>
-        </div>
-        <button onclick="closeSyncModal()" class="text-slate-400 hover:text-white text-sm">✕</button>
-      </div>
-
-      <div class="space-y-4">
-        <div>
-          <label class="text-xs font-semibold uppercase text-slate-300 block mb-1">Squad Sync Code</label>
-          <textarea id="sync-json-textarea" rows="4" class="w-full bg-slate-950 border border-slate-700/80 rounded-xl p-2.5 text-xs text-slate-300 font-mono focus:outline-none focus:border-indigo-500"></textarea>
-          <div class="flex gap-2 mt-2">
-            <button onclick="copySyncCode()" class="flex-1 px-3 py-2 bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-300 border border-indigo-500/40 rounded-lg text-xs font-semibold transition">
-              📋 Copy Code
-            </button>
-            <button onclick="importSyncCode()" class="flex-1 px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold transition shadow">
-              📥 Import
-            </button>
+  <dialog id="editor">
+    <form method="dialog" onsubmit="return false">
+      <div class="dlg-body">
+        <h3 id="ed-title">Edit player</h3>
+        <label class="fl"><span>Name</span><input id="ed-name" class="field" maxlength="40" autocomplete="off"></label>
+        <div class="fl">
+          <span>Overall score</span>
+          <div class="stepper">
+            <button type="button" class="btn" onclick="stepScore(-1)" aria-label="Lower score">−</button>
+            <output id="ed-score">5</output>
+            <button type="button" class="btn" onclick="stepScore(1)" aria-label="Raise score">+</button>
+            <span class="muted small">1 = complete beginner · 10 = strongest</span>
           </div>
         </div>
-
-        <div class="flex items-center gap-3 my-2">
-          <hr class="border-slate-800 flex-1">
-          <span class="text-[10px] text-slate-500 uppercase font-bold tracking-wider">File Backup</span>
-          <hr class="border-slate-800 flex-1">
+        <div class="fl">
+          <span>Positions — tap best first</span>
+          <div id="ed-positions" class="row"></div>
+          <button type="button" class="link" style="justify-self:start" onclick="edState.positions=[];renderEditorChips()">Clear positions</button>
         </div>
-
-        <div class="flex gap-2">
-          <button onclick="downloadRosterFile()" class="flex-1 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg text-xs font-medium transition">
-            💾 Download File
-          </button>
-          <label class="flex-1 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg text-xs font-medium transition text-center cursor-pointer">
-            📁 Upload File
-            <input type="file" id="sync-file-input" accept=".json" onchange="uploadRosterFile(event)" class="hidden">
-          </label>
+        <div class="fl">
+          <span>Attributes</span>
+          <div id="ed-traits" class="row"></div>
         </div>
+        <label class="fl"><span>Parent who coaches (optional)</span>
+          <input id="ed-coach" class="field" maxlength="40" list="coach-names" autocomplete="off" placeholder="e.g. Leon">
+          <datalist id="coach-names"></datalist>
+        </label>
+        <label class="check"><input id="ed-attending" type="checkbox"> Playing this week</label>
       </div>
+      <div class="dlg-foot">
+        <button type="button" id="ed-delete" class="btn danger" onclick="deleteFromEditor()">Delete player</button>
+        <span class="row">
+          <button type="button" class="btn" onclick="closeEditor()">Cancel</button>
+          <button type="button" class="btn primary" onclick="saveEditor()">Save</button>
+        </span>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="copy-dialog">
+    <div class="dlg-body">
+      <h3>Copy this message</h3>
+      <p class="muted small" style="margin:0">Your browser didn't allow automatic copying. Select all and copy.</p>
+      <textarea id="copy-box" class="copybox" readonly></textarea>
     </div>
-  </div>
+    <div class="dlg-foot"><span></span><button class="btn primary" onclick="document.getElementById('copy-dialog').close()">Done</button></div>
+  </dialog>
 
-  <!-- Edit Player Modal -->
-  <div id="edit-modal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 hidden">
-    <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-5 sm:p-6 shadow-2xl">
-      <div class="flex items-center justify-between pb-3 border-b border-slate-800 mb-4">
-        <h3 class="text-base font-bold text-white">Edit Player</h3>
-        <button onclick="closeEditModal()" class="text-slate-400 hover:text-white text-sm">✕</button>
-      </div>
-
-      <input type="hidden" id="modal-player-id">
-      <div class="space-y-3">
-        <div>
-          <label class="text-xs font-semibold uppercase text-slate-400 block mb-1">Name</label>
-          <input id="modal-player-name" type="text" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-emerald-500">
-        </div>
-        <div>
-          <label class="text-xs font-semibold uppercase text-slate-400 block mb-1">Coach / Dad</label>
-          <input id="modal-player-coach" type="text" placeholder="e.g. Mark, James, Ian, Craig" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-emerald-500">
-        </div>
-        <div>
-          <label class="text-xs font-semibold uppercase text-slate-400 block mb-1">Ability Rating (1 - 10)</label>
-          <input id="modal-player-rating" type="number" min="1" max="10" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-emerald-500">
-        </div>
-        <div>
-          <label class="text-xs font-semibold uppercase text-slate-400 block mb-1.5">Positions &amp; Attributes</label>
-          <div class="flex flex-wrap gap-1" id="modal-player-tags"></div>
-        </div>
-      </div>
-
-      <div class="flex items-center justify-end gap-2 mt-5 pt-3 border-t border-slate-800">
-        <button onclick="closeEditModal()" class="px-3 py-1.5 text-xs font-semibold text-slate-400 hover:text-white rounded-lg transition">Cancel</button>
-        <button onclick="savePlayerEdit()" class="px-4 py-1.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg shadow transition">Save</button>
-      </div>
-    </div>
-  </div>
+  <div id="toast" class="toast" hidden></div>
 
   <script>
-    // Configured with your Firebase credentials
+    // ------------------------------------------------------------------
+    // Settings
+    // ------------------------------------------------------------------
+    const APP_VERSION = 2;
+    const ROOT = 'pitchbalancer/v2';
+    const OLD_ROSTER_PATH = 'pitchbalancer/roster';
+    const POSITIONS = ['GK', 'DEF', 'MID', 'WIN', 'STR'];
+    const POSITION_NAMES = { GK: 'Goalkeeper', DEF: 'Defender', MID: 'Midfield', WIN: 'Winger', STR: 'Striker' };
+    const OLD_POSITION_CODES = { Goalkeeper: 'GK', Defender: 'DEF', Midfield: 'MID', Winger: 'WIN', Striker: 'STR' };
+    const TRAITS = ['Creative', 'Tackler', 'Pace', 'Development'];
+    const SHARED_TRAITS = ['Creative', 'Tackler', 'Pace'];
+    const PRIMARY_COACHES = ['Ian', 'Mark', 'James', 'Craig'];
+    const COACHES_NEEDED = 2;
+    const LOW_SCORE = 3;                 // players scored this or lower are shared equally
+    const OUTFIELD = ['DEF', 'MID', 'WIN', 'STR'];
+    const POSITION_WEIGHTS = [1, 0.6, 0.35, 0.2, 0.1];
+    const EVENT_LABELS = { match: 'Match', training: 'Training', festival: 'Festival' };
+
     const firebaseConfig = {
       apiKey: "AIzaSyB2bb_gAELMxcD4b8Y6_FS7nKSfAnodhaw",
       authDomain: "pitchbalancer-db.firebaseapp.com",
@@ -244,1247 +337,837 @@
       appId: "1:390593831860:web:8d978a93743eb8a171c8e1"
     };
 
-    // Initialize Firebase Database
+    // ------------------------------------------------------------------
+    // State
+    // ------------------------------------------------------------------
+    const state = {
+      players: {},          // id -> player
+      playersLoaded: false,
+      current: null,        // { count, event, teams: [[ids]], at }
+      teamInfo: {},         // t0 -> { name, venue, date, meetTime }
+      history: [],
+      online: false,
+      connectedOnce: false,
+      pending: 0,
+      outdated: false,
+      selected: null,       // player id chosen for moving
+      count: 2,
+      event: 'match'
+    };
+
     let db = null;
     try {
       firebase.initializeApp(firebaseConfig);
       db = firebase.database();
     } catch (e) {
-      console.error("Firebase init error:", e);
+      console.error('Database could not start:', e);
+    }
+    const ref = path => db.ref(path ? `${ROOT}/${path}` : ROOT);
+
+    // ------------------------------------------------------------------
+    // Small helpers
+    // ------------------------------------------------------------------
+    function esc(s) {
+      return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+    function toList(v) {
+      if (Array.isArray(v)) return v.filter(x => x !== null && x !== undefined);
+      if (v && typeof v === 'object') return Object.keys(v).sort((a, b) => Number(a) - Number(b)).map(k => v[k]).filter(x => x !== null && x !== undefined);
+      return [];
+    }
+    function clampScore(n) { return Math.max(1, Math.min(10, parseInt(n, 10) || 5)); }
+    function safeKey(id) {
+      const k = String(id || '').replace(/[.#$\[\]\/]/g, '_').slice(0, 40);
+      return k || null;
+    }
+    function newId() { return 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+    function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+    function spread(arr) { return arr.length ? Math.max(...arr) - Math.min(...arr) : 0; }
+    function sameName(a, b) { return String(a).trim().toLowerCase() === String(b).trim().toLowerCase(); }
+    function isPrimaryCoach(name) { return PRIMARY_COACHES.some(c => sameName(c, name)); }
+    function toast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg; t.hidden = false;
+      clearTimeout(toast._t); toast._t = setTimeout(() => t.hidden = true, 2600);
     }
 
-    // Positions are stored in the player's tags in order of strength (first = strongest)
-    const POSITIONS = ["Goalkeeper", "Defender", "Midfield", "Winger", "Striker"];
-    const TRAITS = ["Creative", "Tackler", "Development", "Pace"];
-    const ALL_TAGS = [...POSITIONS, ...TRAITS];
-    const POSITION_SHORT = { Goalkeeper: "GK", Defender: "DEF", Midfield: "MID", Winger: "WIN", Striker: "STR" };
-    // How much a player counts towards a position: 1st choice full, 2nd most of it, and so on
-    const POSITION_WEIGHTS = [1, 0.6, 0.35, 0.2, 0.1];
-
-    // Coaches: each team plays at its own location and needs 2 coaches.
-    // Primary coaches are shared out first; anyone else entered as a coach (e.g. Leon, Karlos)
-    // is a backup who is only relied on when a team is short.
-    const PRIMARY_COACHES = ["Ian", "Mark", "James", "Craig"];
-    const COACHES_NEEDED = 2;
-    function isPrimaryCoach(name) {
-      return PRIMARY_COACHES.some(c => c.toLowerCase() === String(name).trim().toLowerCase());
-    }
-    // A coach only comes if their child is playing; siblings' dad counts once
-    function teamCoaches(team) {
-      const names = [...new Set(team.players.filter(p => p.coach).map(p => p.coach.trim()))];
-      return { primary: names.filter(isPrimaryCoach), backup: names.filter(n => !isPrimaryCoach(n)) };
-    }
-    function coachSummaryHtml(team) {
-      const { primary, backup } = teamCoaches(team);
-      const total = primary.length + backup.length;
-      const list = [...primary.map(escapeHtml), ...backup.map(n => `${escapeHtml(n)} <span class="text-slate-500">(backup)</span>`)].join(', ');
-      const check = generatedTeams.length === 2;
-      const warning = !check ? '' : total === 0 ? '<span class="text-rose-400 font-semibold">⚠️ No coach</span>'
-        : total < COACHES_NEEDED ? '<span class="text-amber-400 font-semibold ml-1">⚠️ needs 1 more</span>' : '';
-      return `
-        <div class="mb-3 px-2.5 py-1.5 rounded-lg bg-slate-950/70 border ${check && total < COACHES_NEEDED ? 'border-amber-500/40' : 'border-slate-800'} flex items-center justify-between gap-2 text-xs">
-          <span class="text-slate-400 text-[10px] font-semibold uppercase tracking-wider shrink-0">Coaches</span>
-          <span class="font-medium text-xs text-indigo-300 text-right">${total > 0 ? `👔 ${list}` : ''}${warning}</span>
-        </div>`;
-    }
-    function coachNamesText(team) {
-      const { primary, backup } = teamCoaches(team);
-      return [...primary, ...backup].join(', ') || 'TBC';
-    }
-
-    function getPositions(player) {
-      return (player.tags || []).filter(t => POSITIONS.includes(t));
-    }
-    function getTraits(player) {
-      return (player.tags || []).filter(t => TRAITS.includes(t));
-    }
-    // Keep positions first (in the order chosen) then attributes
-    function orderedTags(selectedSet) {
-      const list = Array.from(selectedSet);
-      return [...list.filter(t => POSITIONS.includes(t)), ...list.filter(t => TRAITS.includes(t))];
-    }
-
-    function tagPickerHtml(selected, toggleFn, clearFn, large) {
-      const size = large ? 'text-xs px-2.5 py-1 rounded-lg' : 'text-[10px] px-2 py-0.5 rounded';
-      const order = Array.from(selected).filter(t => POSITIONS.includes(t));
-      const off = large ? 'bg-slate-950 text-slate-400 border-slate-800 hover:border-slate-700' : 'bg-slate-900 text-slate-400 border-slate-800 hover:border-slate-700';
-      const on = 'bg-emerald-500/30 text-emerald-200 border-emerald-400 font-semibold';
-      const posButtons = POSITIONS.map(tag => {
-        const rank = order.indexOf(tag);
-        return `<button type="button" onclick="${toggleFn}('${tag}')" class="${size} border transition ${rank >= 0 ? on : off}">
-            ${rank >= 0 ? `<span class="inline-flex items-center justify-center h-4 w-4 rounded-full bg-emerald-500 text-white text-[9px] font-bold mr-0.5">${rank + 1}</span>` : ''}${tag}
-          </button>`;
-      }).join('');
-      const traitButtons = TRAITS.map(tag => {
-        const isSelected = selected.has(tag);
-        return `<button type="button" onclick="${toggleFn}('${tag}')" class="${size} border transition ${isSelected ? on : off}">
-            ${isSelected ? '✓ ' : ''}${tag}
-          </button>`;
-      }).join('');
-      return `
-        <div class="w-full flex items-center justify-between text-[10px] text-slate-400 mb-0.5">
-          <span>Positions: tap in order, strongest first</span>
-          ${order.length ? `<button type="button" onclick="${clearFn}()" class="text-slate-500 hover:text-white underline">Clear positions</button>` : ''}
-        </div>
-        ${posButtons}
-        <div class="w-full text-[10px] text-slate-400 mt-1.5 mb-0.5">Attributes</div>
-        ${traitButtons}`;
-    }
-
-    function playerTagsHtml(player) {
-      const positions = getPositions(player);
-      const traits = getTraits(player);
-      if (positions.length === 0 && traits.length === 0) return '';
-      return `
-        <div class="flex flex-wrap gap-1 pl-6">
-          ${positions.map((t, i) => `
-            <span class="text-[9px] px-1.5 py-px rounded border ${TAG_COLORS[t]} ${i === 0 ? 'font-bold' : 'opacity-80'}" title="${i + 1}${['st','nd','rd'][i] || 'th'} choice">
-              ${i + 1}. ${t}
-            </span>`).join('')}
-          ${traits.map(t => `
-            <span class="text-[9px] px-1.5 py-px rounded border ${TAG_COLORS[t]}">${t}</span>`).join('')}
-        </div>`;
-    }
-
-    const TAG_COLORS = {
-      "Goalkeeper": "bg-amber-500/15 text-amber-300 border-amber-500/30",
-      "Defender": "bg-blue-500/15 text-blue-300 border-blue-500/30",
-      "Midfield": "bg-emerald-500/15 text-emerald-300 border-emerald-500/30",
-      "Winger": "bg-cyan-500/15 text-cyan-300 border-cyan-500/30",
-      "Striker": "bg-rose-500/15 text-rose-300 border-rose-500/30",
-      "Creative": "bg-purple-500/15 text-purple-300 border-purple-500/30",
-      "Tackler": "bg-orange-500/15 text-orange-300 border-orange-500/30",
-      "Development": "bg-pink-500/15 text-pink-300 border-pink-500/30",
-      "Pace": "bg-yellow-500/15 text-yellow-300 border-yellow-500/30"
-    };
-
-    const DEFAULT_ROSTER = [{"id":"p1","name":"Caiden","rating":7,"coach":null,"tags":["Goalkeeper","Midfield","Winger","Striker","Pace"],"attending":true},{"id":"p3","name":"Declan","rating":6,"coach":null,"tags":["Midfield","Winger","Striker"],"attending":true},{"id":"p4","name":"Dexter","rating":5,"coach":null,"tags":["Midfield","Winger","Striker"],"attending":true},{"id":"p5","name":"Esa","rating":7,"coach":null,"tags":["Winger","Striker","Pace"],"attending":true},{"id":"p6","name":"Finn","rating":9,"coach":"Ian","tags":["Winger","Striker","Pace"],"attending":true},{"id":"p7","name":"Griff","rating":1,"coach":null,"tags":["Winger","Striker","Development"],"attending":true},{"id":"p8","name":"Ishaaq","rating":7,"coach":null,"tags":["Defender","Midfield","Tackler"],"attending":true},{"id":"p9","name":"Jacob M","rating":5,"coach":null,"tags":["Defender","Midfield"],"attending":true},{"id":"p10","name":"Jacob P","rating":4,"coach":null,"tags":["Winger","Striker"],"attending":true},{"id":"p11","name":"Jake","rating":1,"coach":null,"tags":["Goalkeeper","Development"],"attending":true},{"id":"p12","name":"Jax","rating":9,"coach":"Mark","tags":["Defender","Midfield","Winger","Tackler"],"attending":true},{"id":"p13","name":"Jaylen","rating":1,"coach":null,"tags":["Striker","Development"],"attending":true},{"id":"p14","name":"Joydon","rating":6,"coach":null,"tags":["Defender","Tackler"],"attending":true},{"id":"p15","name":"Khalid","rating":1,"coach":null,"tags":["Striker","Development"],"attending":true},{"id":"p16","name":"Mason","rating":8,"coach":null,"tags":["Midfield","Winger","Striker","Pace"],"attending":true},{"id":"p17","name":"Mohammed","rating":1,"coach":null,"tags":["Midfield","Development"],"attending":true},{"id":"p18","name":"Noah","rating":3,"coach":null,"tags":["Winger","Striker","Development"],"attending":true},{"id":"p19","name":"Quinn","rating":7,"coach":"James","tags":["Goalkeeper","Defender","Midfield","Striker","Tackler"],"attending":true},{"id":"p20","name":"Rafa","rating":8,"coach":null,"tags":["Midfield","Winger","Creative"],"attending":true},{"id":"p21","name":"Sam","rating":1,"coach":null,"tags":["Goalkeeper","Development"],"attending":true},{"id":"p22","name":"Tommy","rating":8,"coach":"Craig","tags":["Defender","Midfield","Creative"],"attending":true},{"id":"p23","name":"Zac","rating":8,"coach":null,"tags":["Defender"],"attending":true}];
-
-    let players = [];
-    let numberOfTeams = 2;
-    let generatedTeams = [];
-    let currentView = 'detailed';
-    let quickSelectedTags = new Set();
-    let modalSelectedTags = new Set();
-    let draggedPlayerId = null;
-    let sourceTeamIndex = null;
-    let pendingTransferPlayer = null;
-
-    const TEAM_THEMES = [
-      { name: "Team 1", border: "border-emerald-500/40", pill: "bg-emerald-500", text: "text-emerald-400" },
-      { name: "Team 2", border: "border-sky-500/40", pill: "bg-sky-500", text: "text-sky-400" },
-      { name: "Team 3", border: "border-rose-500/40", pill: "bg-rose-500", text: "text-rose-400" },
-      { name: "Team 4", border: "border-amber-500/40", pill: "bg-amber-500", text: "text-amber-400" }
-    ];
-
-    function init() {
-      renderQuickAddTags();
-      setupTouchDragAndDrop();
-
-      if (db) {
-        let firstLoad = true;
-        db.ref('pitchbalancer/roster').on('value', (snapshot) => {
-          const cloudPlayers = normalizePlayers(snapshot.val());
-          if (cloudPlayers.length > 0) {
-            players = cloudPlayers;
-            backupLocal();
-          } else {
-            // The cloud squad looks empty. Never overwrite it automatically: show the last copy
-            // this device saw (or the starting list) and only write when you make a change.
-            players = loadLocalBackup() || JSON.parse(JSON.stringify(DEFAULT_ROSTER));
-          }
-          cloudUsable = true;
-          setSyncBadge(saveFailed ? 'error' : 'cloud');
-          renderSquadList();
-          if (firstLoad) {
-            firstLoad = false;
-            balanceTeams();
-          } else {
-            syncTeamsWithRoster();
-          }
-        }, (error) => {
-          console.warn("Falling back to local cache:", error);
-          cloudUsable = false; // can't read the cloud, so never write a possibly stale copy to it
-          loadLocalFallback();
-        });
-      } else {
-        loadLocalFallback();
-      }
-    }
-
-    function setSyncBadge(mode) {
-      const syncBadge = document.getElementById('sync-status');
-      if (!syncBadge) return;
-      const styles = {
-        cloud: ['☁️ Live Cloud', 'bg-emerald-950 text-emerald-300 border-emerald-800'],
-        local: ['💾 Local Mode', 'bg-amber-950 text-amber-300 border-amber-800'],
-        error: ['⚠️ Not saved to cloud', 'bg-rose-950 text-rose-300 border-rose-800']
-      };
-      const [text, cls] = styles[mode];
-      syncBadge.textContent = text;
-      syncBadge.className = `text-[10px] px-2 py-0.5 rounded-full border font-semibold ${cls}`;
-    }
-
-    // Tidy up any roster data (from the cloud, a sync code or a file) so the app can't break on it
-    function normalizePlayers(data) {
-      if (!data) return [];
-      const list = Array.isArray(data) ? data : Object.values(data);
-      return list
-        .filter(p => p && typeof p.name === 'string' && p.name.trim())
-        .map((p, i) => ({
-          id: p.id ? String(p.id) : `p_${Date.now()}_${i}`,
-          name: p.name.trim(),
-          rating: Math.max(1, Math.min(10, parseInt(p.rating, 10) || 5)),
-          coach: typeof p.coach === 'string' && p.coach.trim() ? p.coach.trim() : null,
-          tags: Array.isArray(p.tags) ? p.tags.filter(t => ALL_TAGS.includes(t)) : [],
-          attending: p.attending !== false
-        }));
-    }
-
-    function loadLocalFallback() {
-      let saved = [];
-      try { saved = normalizePlayers(JSON.parse(localStorage.getItem('pitchbalancer_players_v15'))); } catch (e) {}
-      players = saved.length > 0 ? saved : JSON.parse(JSON.stringify(DEFAULT_ROSTER));
-      setSyncBadge('local');
-      renderSquadList();
-      balanceTeams();
-    }
-
-    let cloudUsable = true;   // false when the cloud couldn't be read: then nothing is written to it
-    let saveFailed = false;   // true after a rejected save, until the next one works
-
-    function clonePlayers(list) {
-      return JSON.parse(JSON.stringify(list));
-    }
-    function backupLocal() {
-      try { localStorage.setItem('pitchbalancer_players_v15', JSON.stringify(players)); } catch (e) {}
-    }
-    function loadLocalBackup() {
-      try {
-        const saved = normalizePlayers(JSON.parse(localStorage.getItem('pitchbalancer_players_v15')));
-        return saved.length > 0 ? saved : null;
-      } catch (e) { return null; }
-    }
-
-    function reportSaveResult(promise) {
-      promise.then(result => {
-        if (result && result.committed === false) throw new Error('Save was not applied');
-        saveFailed = false;
-        setSyncBadge('cloud');
-      }).catch(err => {
-        console.warn("Cloud save failed:", err);
-        saveFailed = true;
-        setSyncBadge('error');
-        alert("That change could not be saved to the cloud, so it has been undone. Check your connection and try again.");
-      });
-    }
-
-    // Replaces the WHOLE squad (Reset Default, Import). Everyday changes use updateRoster instead.
-    function savePlayers() {
-      backupLocal();
-      if (db && cloudUsable) {
-        reportSaveResult(db.ref('pitchbalancer/roster').set(players));
-      }
-    }
-
-    // Every everyday change (add, edit, delete, attendance) goes through here.
-    // The change is applied to this screen straight away, and then to the LATEST copy in the
-    // cloud, so another device's recent changes are kept, not overwritten by an out-of-date copy.
-    function updateRoster(mutator, rebalance) {
-      const before = clonePlayers(players);
-      players = mutator(clonePlayers(players));
-      backupLocal();
-      if (db && cloudUsable) {
-        reportSaveResult(db.ref('pitchbalancer/roster').transaction(current => {
-          const latest = normalizePlayers(current);
-          return mutator(latest.length > 0 ? latest : clonePlayers(before));
-        }));
-      }
-      renderSquadList();
-      if (rebalance) balanceTeams(); else syncTeamsWithRoster();
-    }
-
-    function replaceRoster(newPlayers) {
-      players = newPlayers;
-      savePlayers();
-      renderSquadList();
-      balanceTeams();
-    }
-
-    function resetToImportedDefault() {
-      if (confirm("Reset the squad to the original starting list?\n\nThis removes ALL your changes (coaches, ratings, positions, new players) on every device.")) {
-        replaceRoster(JSON.parse(JSON.stringify(DEFAULT_ROSTER)));
-      }
-    }
-
-    function openSyncModal() {
-      document.getElementById('sync-json-textarea').value = JSON.stringify(players);
-      document.getElementById('sync-modal').classList.remove('hidden');
-    }
-    function closeSyncModal() { document.getElementById('sync-modal').classList.add('hidden'); }
-    function copySyncCode() {
-      navigator.clipboard.writeText(JSON.stringify(players)).then(() => {
-        alert("Roster code copied!");
-      });
-    }
-    function importSyncCode() {
-      const val = document.getElementById('sync-json-textarea').value.trim();
-      if (!val) return;
-      try {
-        const imported = normalizePlayers(JSON.parse(val));
-        if (imported.length === 0) { alert("That code doesn't contain any players."); return; }
-        if (!confirm(`Replace the squad with these ${imported.length} players on every device?`)) return;
-        replaceRoster(imported);
-        closeSyncModal();
-        alert(`Imported ${imported.length} players!`);
-      } catch (err) { alert("Invalid code: " + err.message); }
-    }
-    function downloadRosterFile() {
-      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(players, null, 2));
-      const downloadAnchor = document.createElement('a');
-      downloadAnchor.setAttribute("href", dataStr);
-      downloadAnchor.setAttribute("download", `pitchbalancer_${new Date().toISOString().slice(0,10)}.json`);
-      document.body.appendChild(downloadAnchor);
-      downloadAnchor.click();
-      downloadAnchor.remove();
-    }
-    function uploadRosterFile(event) {
-      const file = event.target.files[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = function(e) {
-        try {
-          const imported = normalizePlayers(JSON.parse(e.target.result));
-          if (imported.length === 0) { alert("That file doesn't contain any players."); return; }
-          if (!confirm(`Replace the squad with these ${imported.length} players on every device?`)) return;
-          replaceRoster(imported);
-          closeSyncModal();
-        } catch (err) { alert("Invalid JSON file."); }
-      };
-      reader.readAsText(file);
-      event.target.value = '';
-    }
-
-    function setActiveView(view) {
-      currentView = view;
-      ['detailed', 'basic', 'whatsapp'].forEach(v => {
-        const tab = document.getElementById(`view-tab-${v}`);
-        if (v === view) {
-          tab.className = "flex-1 sm:flex-none px-3 py-1.5 rounded-lg text-xs font-bold transition bg-emerald-600 text-white shadow";
-        } else {
-          tab.className = "flex-1 sm:flex-none px-3 py-1.5 rounded-lg text-xs font-bold transition text-slate-400 hover:text-white";
-        }
-      });
-      renderCurrentView();
-    }
-
-    function renderQuickAddTags() {
-      const container = document.getElementById('quick-add-tags');
-      container.innerHTML = tagPickerHtml(quickSelectedTags, 'toggleQuickTag', 'clearQuickPositions', false);
-    }
-
-    function toggleQuickTag(tag) {
-      if (quickSelectedTags.has(tag)) quickSelectedTags.delete(tag);
-      else quickSelectedTags.add(tag);
-      renderQuickAddTags();
-    }
-    function clearQuickPositions() {
-      POSITIONS.forEach(t => quickSelectedTags.delete(t));
-      renderQuickAddTags();
-    }
-
-    function addQuickPlayer() {
-      const nameInput = document.getElementById('quick-name');
-      const ratingInput = document.getElementById('quick-rating');
-      const coachInput = document.getElementById('quick-coach');
-      const name = nameInput.value.trim();
-      const rating = parseInt(ratingInput.value, 10) || 5;
-      const coach = coachInput.value.trim() || null;
-
-      if (!name) return;
-
-      const newPlayer = {
-        id: 'p_' + Date.now(),
-        name,
-        coach,
-        rating: Math.max(1, Math.min(10, rating)),
-        tags: orderedTags(quickSelectedTags),
-        attending: true
-      };
-
-      nameInput.value = '';
-      coachInput.value = '';
-      quickSelectedTags.clear();
-      renderQuickAddTags();
-      updateRoster(list => list.some(x => x.id === newPlayer.id) ? list : [...list, newPlayer]);
-    }
-
-    function renderSquadList() {
-      const container = document.getElementById('players-container');
-      const searchTerm = (document.getElementById('player-search').value || '').toLowerCase();
-
-      const filtered = players.filter(p => {
-        const matchName = p.name.toLowerCase().includes(searchTerm);
-        const matchCoach = p.coach && p.coach.toLowerCase().includes(searchTerm);
-        const matchTag = p.tags && p.tags.some(t => t.toLowerCase().includes(searchTerm));
-        return matchName || matchCoach || matchTag;
-      });
-
-      document.getElementById('attending-count').textContent = players.filter(p => p.attending).length;
-      document.getElementById('total-count').textContent = players.length;
-
-      container.innerHTML = filtered.map(player => `
-        <div class="flex flex-col gap-1.5 p-2 rounded-xl border ${player.attending ? 'bg-slate-950/70 border-slate-800' : 'bg-slate-950/20 border-slate-800/40 opacity-60'} hover:border-slate-700 transition">
-          <div class="flex items-center justify-between">
-            <label class="flex items-center gap-2 cursor-pointer flex-1 min-w-0">
-              <input type="checkbox" ${player.attending ? 'checked' : ''} onchange="toggleAttendance('${player.id}')" class="h-4 w-4 rounded bg-slate-900 border-slate-700 text-emerald-500 focus:ring-0 cursor-pointer">
-              <span class="text-sm font-medium text-slate-200 truncate">${escapeHtml(player.name)}</span>
-              ${player.coach ? `
-                <span class="text-[9px] px-1.5 py-0.5 rounded bg-indigo-500/20 border border-indigo-500/40 text-indigo-300 font-medium">
-                  👔 ${escapeHtml(player.coach)}
-                </span>
-              ` : ''}
-            </label>
-            <div class="flex items-center gap-1.5">
-              <span class="px-2 py-0.5 text-xs font-bold rounded-md bg-black border border-slate-700 text-slate-200">
-                ${player.rating}
-              </span>
-              <button onclick="openEditModal('${player.id}')" class="text-slate-400 hover:text-white text-xs px-1.5 py-1 rounded bg-slate-900 border border-slate-800">✏️</button>
-              <button onclick="removePlayer('${player.id}')" class="text-slate-600 hover:text-rose-400 text-xs px-1">✕</button>
-            </div>
-          </div>
-          ${playerTagsHtml(player)}
-        </div>
-      `).join('');
-    }
-
-    function toggleAttendance(id) {
-      const p = players.find(x => x.id === id);
-      if (!p) return;
-      const nowAttending = !p.attending;
-      updateRoster(list => {
-        const target = list.find(x => x.id === id);
-        if (target) target.attending = nowAttending;
-        return list;
-      });
-    }
-    function toggleAllAttendance(status) {
-      updateRoster(list => { list.forEach(x => x.attending = status); return list; }, true);
-    }
-    function removePlayer(id) {
-      const p = players.find(x => x.id === id);
-      if (!p || !confirm(`Remove ${p.name} from the squad on every device?`)) return;
-      updateRoster(list => list.filter(x => x.id !== id));
-    }
-
-    function openEditModal(id) {
-      const p = players.find(x => x.id === id);
-      if (!p) return;
-      document.getElementById('modal-player-id').value = p.id;
-      document.getElementById('modal-player-name').value = p.name;
-      document.getElementById('modal-player-coach').value = p.coach || '';
-      document.getElementById('modal-player-rating').value = p.rating;
-      modalSelectedTags = new Set(p.tags || []);
-      renderModalTags();
-      document.getElementById('edit-modal').classList.remove('hidden');
-    }
-    function closeEditModal() { document.getElementById('edit-modal').classList.add('hidden'); }
-    function renderModalTags() {
-      const container = document.getElementById('modal-player-tags');
-      container.innerHTML = tagPickerHtml(modalSelectedTags, 'toggleModalTag', 'clearModalPositions', true);
-    }
-    function toggleModalTag(tag) {
-      if (modalSelectedTags.has(tag)) modalSelectedTags.delete(tag);
-      else modalSelectedTags.add(tag);
-      renderModalTags();
-    }
-    function clearModalPositions() {
-      POSITIONS.forEach(t => modalSelectedTags.delete(t));
-      renderModalTags();
-    }
-    function savePlayerEdit() {
-      const id = document.getElementById('modal-player-id').value;
-      const p = players.find(x => x.id === id);
-      if (!p) return;
-      const name = document.getElementById('modal-player-name').value.trim();
-      const coach = document.getElementById('modal-player-coach').value.trim() || null;
-      const rating = parseInt(document.getElementById('modal-player-rating').value, 10) || 5;
-
-      if (!name) return;
-      const changes = {
-        name,
-        coach,
-        rating: Math.max(1, Math.min(10, rating)),
-        tags: orderedTags(modalSelectedTags)
-      };
-      closeEditModal();
-      updateRoster(list => {
-        const target = list.find(x => x.id === id);
-        if (target) Object.assign(target, changes);
-        return list;
-      });
-    }
-
-    function setTeamCount(count) {
-      numberOfTeams = count;
-      [1, 2, 3, 4].forEach(n => {
-        const btn = document.getElementById(`btn-team-${n}`);
-        if (n === count) btn.className = "px-3 py-1 rounded-md text-xs font-bold transition bg-emerald-600 text-white shadow";
-        else btn.className = "px-3 py-1 rounded-md text-xs font-bold transition text-slate-400 hover:text-white";
-      });
-      balanceTeams();
-    }
-
-    function calculatePenalty(teams) {
-      let penalty = 0;
-      const counts = teams.map(t => t.players.length);
-      const minCount = Math.min(...counts);
-      const maxCount = Math.max(...counts);
-      if (maxCount - minCount > 1) penalty += (maxCount - minCount) * 1000000;
-
-      const scores = teams.map(t => t.players.reduce((sum, p) => sum + p.rating, 0));
-      penalty += (Math.max(...scores) - Math.min(...scores)) * 10000;
-
-      POSITIONS.forEach(pos => {
-        const isKeeper = pos === "Goalkeeper";
-        // Position strength per team: 1st-choice players count fully, later choices count less
-        const cover = teams.map(t => t.players.reduce((sum, p) => {
-          const rank = getPositions(p).indexOf(pos);
-          return sum + (rank >= 0 ? (POSITION_WEIGHTS[rank] || 0.1) : 0);
-        }, 0));
-        penalty += (Math.max(...cover) - Math.min(...cover)) * (isKeeper ? 3000 : 1500);
-
-        // Every team needs someone for each position (as their 1st or 2nd choice;
-        // for goalkeeper, anyone willing to go in goal)
-        teams.forEach(t => {
-          const covered = t.players.some(p => {
-            const rank = getPositions(p).indexOf(pos);
-            return rank >= 0 && (isKeeper || rank <= 1);
-          });
-          if (!covered) penalty += 12000;
-        });
-      });
-
-      // Share out Creative, Tackler and Pace players
-      ["Creative", "Tackler", "Pace"].forEach(tag => {
-        const tCounts = teams.map(t => t.players.filter(p => (p.tags || []).includes(tag)).length);
-        penalty += (Math.max(...tCounts) - Math.min(...tCounts)) * 2500;
-      });
-
-      // Coaches only matter when picking 2 teams: then each team must have at least 2
-      // (backups count towards this). With 1, 3 or 4 teams coaches are ignored.
-      if (teams.length === 2) {
-        const coachInfo = teams.map(teamCoaches);
-        coachInfo.forEach(c => {
-          const total = c.primary.length + c.backup.length;
-          if (total < COACHES_NEEDED) penalty += (COACHES_NEEDED - total) * 100000;
-        });
-        // Share the primary coaches out evenly before leaning on backups
-        const primaryCounts = coachInfo.map(c => c.primary.length);
-        penalty += (Math.max(...primaryCounts) - Math.min(...primaryCounts)) * 3000;
-      }
-
-      // Beginners (rated 1, or tagged Development) have little effect on games: share them out equally
-      const isBeginner = p => p.rating === 1 || (p.tags || []).includes("Development");
-      const beginnerCounts = teams.map(t => t.players.filter(isBeginner).length);
-      penalty += (Math.max(...beginnerCounts) - Math.min(...beginnerCounts)) * 8000;
-
-      return penalty;
-    }
-
-    // List each team keeper-first, then defenders, midfield, wingers, strikers (by 1st choice)
-    function getPositionalHierarchyRank(player) {
-      const first = getPositions(player)[0];
-      return first ? POSITIONS.indexOf(first) : POSITIONS.length;
-    }
-
-    function sortTeamTactically(teamPlayers) {
-      return [...teamPlayers].sort((a, b) => {
-        const rankA = getPositionalHierarchyRank(a);
-        const rankB = getPositionalHierarchyRank(b);
-        if (rankA !== rankB) return rankA - rankB;
-        return b.rating - a.rating;
-      });
-    }
-
-    // ---- Team details (names, venues, dates) are remembered on this device ----
-    const TEAM_DETAILS_KEY = 'pitchbalancer_team_details_v1';
-    let teamDetails = [];
-    try { teamDetails = JSON.parse(localStorage.getItem(TEAM_DETAILS_KEY)) || []; } catch (e) { teamDetails = []; }
-
-    function getTeamDetails(i) {
-      const d = teamDetails[i] || {};
+    // A tidy, safe player object, whatever shape the data arrived in
+    function cleanPlayer(id, p) {
+      if (!p || typeof p.name !== 'string' || !p.name.trim()) return null;
+      const positions = [...new Set(toList(p.positions).filter(x => POSITIONS.includes(x)))];
+      const traits = [...new Set(toList(p.traits).filter(x => TRAITS.includes(x)))];
       return {
-        name: d.name || `Team ${i + 1}`,
-        venue: d.venue !== undefined ? d.venue : `Pitch ${i + 1}`,
-        date: d.date !== undefined ? d.date : "Saturday Morning",
-        meetTime: d.meetTime !== undefined ? d.meetTime : "09:30 AM (10:00 KO)"
+        id,
+        name: p.name.trim().slice(0, 40),
+        rating: clampScore(p.rating),
+        positions,
+        traits,
+        coach: typeof p.coach === 'string' ? p.coach.trim().slice(0, 40) : '',
+        attending: p.attending !== false
       };
     }
-
-    function saveTeamDetail(i, field, value) {
-      teamDetails[i] = { ...getTeamDetails(i), ...(teamDetails[i] || {}), [field]: value };
-      try { localStorage.setItem(TEAM_DETAILS_KEY, JSON.stringify(teamDetails)); } catch (e) {}
-    }
-
-    function shuffle(arr) {
-      for (let i = arr.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [arr[i], arr[j]] = [arr[j], arr[i]];
+    // Converts a player from the old app (tags list) or a new-format backup
+    function fromAnyFormat(p) {
+      if (!p || typeof p !== 'object') return null;
+      const id = safeKey(p.id) || newId();
+      if (p.tags) {
+        const tags = toList(p.tags);
+        return cleanPlayer(id, {
+          name: p.name, rating: p.rating, coach: p.coach, attending: p.attending,
+          positions: tags.map(t => OLD_POSITION_CODES[t]).filter(Boolean),
+          traits: tags.filter(t => TRAITS.includes(t))
+        });
       }
-      return arr;
+      return cleanPlayer(id, p);
+    }
+    // What gets stored in the database for a player (no id inside; empty things left out)
+    function storedForm(p) {
+      const out = { name: p.name, rating: p.rating, attending: !!p.attending, updatedAt: Date.now() };
+      if (p.positions.length) out.positions = [...p.positions];
+      if (p.traits.length) out.traits = [...p.traits];
+      if (p.coach) out.coach = p.coach;
+      return out;
+    }
+    function playerList() {
+      return Object.values(state.players).sort((a, b) => a.name.localeCompare(b.name));
     }
 
-    // One attempt: share players out (strongest first, with a little randomness), then keep
-    // swapping pairs between teams while that makes the teams fairer.
-    function buildTeamsAttempt(pool, targetSizes) {
-      const teams = targetSizes.map(() => ({ players: [] }));
-      const order = shuffle([...pool]).sort((a, b) => (b.rating + Math.random() * 1.5) - (a.rating + Math.random() * 1.5));
+    // ------------------------------------------------------------------
+    // Saving. Every change is a small update to just the fields that changed.
+    // ------------------------------------------------------------------
+    function canWrite() {
+      if (!db) { alert("Can't reach the database, so nothing can be saved right now."); return false; }
+      if (state.outdated) { alert('This copy of the app is out of date. Tap "Reload now" at the top first.'); return false; }
+      return true;
+    }
+    function write(updates) {
+      if (!canWrite()) return Promise.resolve(false);
+      state.pending++; renderStatus();
+      return ref().update(updates)
+        .then(() => true)
+        .catch(err => {
+          console.warn('Save failed', err);
+          alert("That change couldn't be saved, so it has been undone.\n\n(" + (err && err.message ? err.message : err) + ')');
+          return false;
+        })
+        .finally(() => { state.pending--; renderStatus(); });
+    }
+    function addHistory(updates, text, extra) {
+      const key = ref('history').push().key;
+      const entry = { at: Date.now(), text };
+      if (extra) Object.assign(entry, extra);
+      updates[`history/${key}`] = entry;
+    }
+    function describeChange(before, after) {
+      const parts = [];
+      if (before.name !== after.name) parts.push(`name → ${after.name}`);
+      if (before.rating !== after.rating) parts.push(`score ${before.rating} → ${after.rating}`);
+      if (before.positions.join() !== after.positions.join()) parts.push(`positions → ${after.positions.join(', ') || 'none'}`);
+      if (before.traits.join() !== after.traits.join()) parts.push(`attributes → ${after.traits.join(', ') || 'none'}`);
+      if (before.coach !== after.coach) parts.push(after.coach ? `coach → ${after.coach}` : 'coach removed');
+      return parts.join(', ');
+    }
 
-      order.forEach(player => {
-        const open = teams
-          .map((t, idx) => ({ idx, count: t.players.length, sum: t.players.reduce((s, p) => s + p.rating, 0) }))
-          .filter(t => t.count < targetSizes[t.idx]);
-        open.sort((a, b) => a.sum - b.sum || Math.random() - 0.5);
-        teams[open[0].idx].players.push(player);
+    function savePlayer(p, isNew) {
+      const updates = {};
+      if (isNew) {
+        updates[`players/${p.id}`] = storedForm(p);
+        addHistory(updates, `Added ${p.name}`, { playerId: p.id, after: JSON.stringify(storedForm(p)) });
+      } else {
+        const before = state.players[p.id];
+        if (!before) { alert('That player no longer exists. They may have been deleted on another device.'); return; }
+        const summary = describeChange(before, p);
+        const attendChanged = before.attending !== p.attending;
+        if (!summary && !attendChanged) return;
+        if (before.name !== p.name) updates[`players/${p.id}/name`] = p.name;
+        if (before.rating !== p.rating) updates[`players/${p.id}/rating`] = p.rating;
+        if (before.positions.join() !== p.positions.join()) updates[`players/${p.id}/positions`] = p.positions.length ? p.positions : null;
+        if (before.traits.join() !== p.traits.join()) updates[`players/${p.id}/traits`] = p.traits.length ? p.traits : null;
+        if (before.coach !== p.coach) updates[`players/${p.id}/coach`] = p.coach || null;
+        if (attendChanged) {
+          updates[`players/${p.id}/attending`] = p.attending;
+          addTeamUpdate(updates, { ...state.players, [p.id]: p });
+        }
+        updates[`players/${p.id}/updatedAt`] = Date.now();
+        if (summary) addHistory(updates, `${before.name}: ${summary}`, { playerId: p.id, before: JSON.stringify(storedForm(before)) });
+      }
+      return write(updates);
+    }
+    function deletePlayer(id) {
+      const p = state.players[id];
+      if (!p) return;
+      const updates = { [`players/${id}`]: null };
+      const remaining = { ...state.players }; delete remaining[id];
+      addTeamUpdate(updates, remaining);
+      addHistory(updates, `Deleted ${p.name}`, { playerId: id, before: JSON.stringify(storedForm(p)) });
+      return write(updates);
+    }
+    function setAttending(id, value) {
+      const p = state.players[id];
+      if (!p) return;
+      const updates = { [`players/${id}/attending`]: value };
+      addTeamUpdate(updates, { ...state.players, [id]: { ...p, attending: value } });
+      return write(updates);
+    }
+    function setAllAttending(value) {
+      const updates = {};
+      const next = {};
+      for (const p of Object.values(state.players)) {
+        if (p.attending !== value) updates[`players/${p.id}/attending`] = value;
+        next[p.id] = { ...p, attending: value };
+      }
+      if (!Object.keys(updates).length) return;
+      if (state.current && value === false) updates['current'] = null;
+      else addTeamUpdate(updates, next);
+      return write(updates);
+    }
+    function undoHistory(key) {
+      const h = state.history.find(x => x.key === key);
+      if (!h || h.undone) return;
+      const updates = { [`history/${key}/undone`]: true };
+      if (h.scope === 'squad') {
+        if (!confirm('Put the whole squad back to how it was before this import?')) return;
+        const before = JSON.parse(h.before || '{}');
+        for (const id of Object.keys(state.players)) updates[`players/${id}`] = null;
+        for (const [id, p] of Object.entries(before)) updates[`players/${id}`] = { ...p, updatedAt: Date.now() };
+        addHistory(updates, `Undid: ${h.text}`);
+        return write(updates);
+      }
+      const id = h.playerId;
+      if (!id) return;
+      if (h.before) {
+        const before = JSON.parse(h.before);
+        updates[`players/${id}`] = { ...before, updatedAt: Date.now() };
+      } else {
+        updates[`players/${id}`] = null; // undoing an "Added"
+      }
+      addHistory(updates, `Undid: ${h.text}`, { playerId: id, before: state.players[id] ? JSON.stringify(storedForm(state.players[id])) : null });
+      return write(updates);
+    }
+
+    // ------------------------------------------------------------------
+    // Loading and live sync
+    // ------------------------------------------------------------------
+    function init() {
+      renderAll();
+      if (!db) { renderStatus(); return; }
+
+      db.ref('.info/connected').on('value', s => {
+        state.online = !!s.val();
+        if (state.online) state.connectedOnce = true;
+        renderStatus();
       });
 
-      let currentPenalty = calculatePenalty(teams);
-      let improved = true;
-      let iterations = 0;
-      while (improved && iterations < 250) {
-        improved = false;
-        iterations++;
-        outer:
-        for (let i = 0; i < teams.length; i++) {
-          for (let j = i + 1; j < teams.length; j++) {
-            const A = teams[i].players, B = teams[j].players;
-            for (let a = 0; a < A.length; a++) {
-              for (let b = 0; b < B.length; b++) {
-                const pA = A[a], pB = B[b];
-                A[a] = pB; B[b] = pA;
-                const newPenalty = calculatePenalty(teams);
-                if (newPenalty < currentPenalty) {
-                  currentPenalty = newPenalty;
-                  improved = true;
-                  break outer;
-                }
-                A[a] = pA; B[b] = pB;
-              }
+      ref('meta').on('value', s => {
+        const meta = s.val() || {};
+        const needed = Number(meta.minVersion) || 0;
+        state.outdated = needed > APP_VERSION;
+        document.getElementById('update-banner').hidden = !state.outdated;
+        if (needed < APP_VERSION) ref('meta/minVersion').set(APP_VERSION).catch(() => {});
+        renderStatus();
+      }, onReadError);
+
+      ref('players').on('value', s => {
+        const raw = s.val() || {};
+        const next = {};
+        for (const [id, p] of Object.entries(raw)) {
+          const c = cleanPlayer(id, p);
+          if (c) next[id] = c;
+        }
+        state.players = next;
+        state.playersLoaded = true;
+        if (!Object.keys(next).length) migrateFromOldApp();
+        if (state.selected && !next[state.selected]) state.selected = null;
+        renderAll();
+      }, onReadError);
+
+      ref('current').on('value', s => {
+        const c = s.val();
+        if (c && c.teams) {
+          const count = Math.max(1, Math.min(4, Number(c.count) || 2));
+          state.current = {
+            count,
+            event: EVENT_LABELS[c.event] ? c.event : 'match',
+            teams: Array.from({ length: count }, (_, i) => toList(c.teams['t' + i]).map(String))
+          };
+          state.count = state.current.count;
+          state.event = state.current.event;
+        } else {
+          state.current = null;
+        }
+        renderAll();
+      }, onReadError);
+
+      ref('settings/teams').on('value', s => { state.teamInfo = s.val() || {}; renderTeams(); }, onReadError);
+
+      ref('history').limitToLast(40).on('value', s => {
+        const raw = s.val() || {};
+        state.history = Object.entries(raw).map(([key, h]) => ({ key, ...h })).sort((a, b) => (b.at || 0) - (a.at || 0));
+        renderHistory();
+      }, onReadError);
+    }
+    function onReadError(err) {
+      console.warn('Read failed', err);
+      const b = document.getElementById('offline-banner');
+      document.getElementById('offline-text').textContent = "The database refused to share the squad. The database rules may need updating.";
+      b.hidden = false;
+    }
+
+    // One-off: bring the squad across from the old app's single list
+    let migrating = false;
+    function migrateFromOldApp() {
+      if (migrating || !db) return;
+      migrating = true;
+      db.ref(OLD_ROSTER_PATH).once('value').then(s => {
+        const old = toList(s.val()).map(fromAnyFormat).filter(Boolean);
+        if (!old.length) return;
+        return ref('meta/migratedAt').transaction(cur => cur ? undefined : Date.now()).then(res => {
+          if (!res.committed) return;
+          const updates = {};
+          const seen = new Set();
+          for (const p of old) {
+            let id = p.id; while (seen.has(id)) id = newId();
+            seen.add(id);
+            updates[`players/${id}`] = storedForm(p);
+          }
+          addHistory(updates, `Brought ${old.length} players across from the old app`);
+          return write(updates);
+        });
+      }).catch(err => console.warn('Could not read the old squad', err))
+        .finally(() => { migrating = false; });
+    }
+
+    // ------------------------------------------------------------------
+    // Team picking
+    // ------------------------------------------------------------------
+    function coachRuleApplies(count, event) {
+      return count === 2 && event !== 'training';
+    }
+
+    // Scores a set of teams as a list of numbers, most important first.
+    // Lower is better; two line-ups are compared number by number.
+    function evaluate(teams, coachRule) {
+      const totals = [], low = [], dev = [], primary = [];
+      const traitCounts = { Creative: [], Tackler: [], Pace: [] };
+      const strength = { GK: [], DEF: [], MID: [], WIN: [], STR: [] };
+      let coachShort = 0, keeperMissing = 0, positionsMissing = 0;
+
+      for (const team of teams) {
+        let total = 0, lowN = 0, devN = 0, hasKeeper = false;
+        const covered = { DEF: false, MID: false, WIN: false, STR: false };
+        const tc = { Creative: 0, Tackler: 0, Pace: 0 };
+        const st = { GK: 0, DEF: 0, MID: 0, WIN: 0, STR: 0 };
+        const prim = new Set(), backup = new Set();
+        for (const p of team) {
+          total += p.rating;
+          if (p.rating <= LOW_SCORE) lowN++;
+          if (p.traits.includes('Development')) devN++;
+          p.positions.forEach((pos, rank) => {
+            if (pos === 'GK') hasKeeper = true;
+            else if (rank <= 1) covered[pos] = true;
+            st[pos] += POSITION_WEIGHTS[rank] || 0.1;
+          });
+          for (const t of SHARED_TRAITS) if (p.traits.includes(t)) tc[t]++;
+          if (coachRule && p.coach) (isPrimaryCoach(p.coach) ? prim : backup).add(p.coach.trim().toLowerCase());
+        }
+        totals.push(total); low.push(lowN); dev.push(devN);
+        if (!hasKeeper) keeperMissing++;
+        for (const pos of OUTFIELD) if (!covered[pos]) positionsMissing++;
+        for (const t of SHARED_TRAITS) traitCounts[t].push(tc[t]);
+        for (const pos of POSITIONS) strength[pos].push(st[pos]);
+        if (coachRule) {
+          coachShort += Math.max(0, COACHES_NEEDED - (prim.size + backup.size));
+          primary.push(prim.size);
+        }
+      }
+      let fine = POSITIONS.reduce((s, pos) => s + spread(strength[pos]), 0);
+      if (coachRule) fine += spread(primary);
+      return [
+        coachShort,                                                    // rule 2: coaches
+        spread(totals),                                                // rule 3: ability
+        spread(low),                                                   // rule 4: players scored 3 or under
+        spread(dev),                                                   // rule 5: Development players apart
+        keeperMissing,                                                 // rule 6: a keeper per team
+        positionsMissing,                                              // rule 7: positions covered
+        SHARED_TRAITS.reduce((s, t) => s + spread(traitCounts[t]), 0), // rule 8: Creative / Tackler / Pace
+        Math.round(fine * 10)                                          // tie-break: position strength, primary coaches
+      ];
+    }
+    function compare(a, b) {
+      for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return a[i] - b[i];
+      return 0;
+    }
+    function teamSizes(n, count) {
+      const base = Math.floor(n / count), extra = n % count;
+      return Array.from({ length: count }, (_, i) => base + (i < extra ? 1 : 0));
+    }
+    // One attempt: a random fair-ish start, then keep swapping pairs while it gets better
+    function attempt(pool, sizes, coachRule) {
+      const order = Math.random() < 0.5
+        ? shuffle([...pool])
+        : [...pool].sort((a, b) => (b.rating + Math.random() * 2) - (a.rating + Math.random() * 2));
+      const teams = sizes.map(() => []);
+      let t = 0, dir = 1;
+      for (const p of order) {
+        let guard = 0;
+        while (teams[t].length >= sizes[t] && guard++ < 10) { t += dir; if (t >= teams.length || t < 0) { dir = -dir; t += dir; } }
+        teams[t].push(p);
+        t += dir; if (t >= teams.length || t < 0) { dir = -dir; t += dir; }
+      }
+      let score = evaluate(teams, coachRule);
+      for (let guard = 0; guard < 400; guard++) {
+        let improved = false;
+        const pairs = [];
+        for (let i = 0; i < teams.length; i++) for (let j = i + 1; j < teams.length; j++) pairs.push([i, j]);
+        shuffle(pairs);
+        search:
+        for (const [i, j] of pairs) {
+          const A = teams[i], B = teams[j];
+          for (let a = 0; a < A.length; a++) {
+            for (let b = 0; b < B.length; b++) {
+              [A[a], B[b]] = [B[b], A[a]];
+              const s = evaluate(teams, coachRule);
+              if (compare(s, score) < 0) { score = s; improved = true; break search; }
+              [A[a], B[b]] = [B[b], A[a]];
             }
           }
         }
+        if (!improved) break;
       }
-      return { teams, penalty: currentPenalty };
+      return { teams, score };
     }
-
-    function teamsSignature(teams) {
-      return teams.map(t => t.players.map(p => p.id).sort().join(',')).sort().join('|');
+    function signature(teams) {
+      return teams.map(t => t.map(p => p.id).sort().join(',')).sort().join('|');
     }
-
-    // Re-pick: try lots of fair line-ups and choose one of the best at random,
-    // avoiding the line-up already on screen where possible.
-    function balanceTeams() {
-      const pool = players.filter(p => p.attending);
-      if (pool.length < numberOfTeams) {
-        generatedTeams = [];
-        renderCurrentView();
-        return;
-      }
-
-      const baseSize = Math.floor(pool.length / numberOfTeams);
-      const remainder = pool.length % numberOfTeams;
-      const targetSizes = Array.from({ length: numberOfTeams }, (_, i) => baseSize + (i < remainder ? 1 : 0));
-
+    function pickTeams(pool, count, event, avoidSignature) {
+      if (count === 1) return [pool.map(p => p.id)];
+      const coachRule = coachRuleApplies(count, event);
+      const sizes = teamSizes(pool.length, count);
       const attempts = [];
-      for (let k = 0; k < 40; k++) attempts.push(buildTeamsAttempt(pool, targetSizes));
-      const best = Math.min(...attempts.map(a => a.penalty));
-      const TOLERANCE = 2000; // only picks line-ups almost as fair as the best found
-
-      const currentSig = generatedTeams.length === numberOfTeams ? teamsSignature(generatedTeams) : null;
+      for (let k = 0; k < 50; k++) attempts.push(attempt(pool, sizes, coachRule));
+      attempts.sort((x, y) => compare(x.score, y.score));
+      const best = attempts[0].score;
+      // Any line-up that matches the best on all 8 rules is equally fair; pick one at random
       const seen = new Set();
-      let candidates = attempts.filter(a => {
-        if (a.penalty > best + TOLERANCE) return false;
-        const sig = teamsSignature(a.teams);
+      let fair = attempts.filter(a => {
+        if (compare(a.score.slice(0, 7), best.slice(0, 7)) !== 0) return false;
+        const sig = signature(a.teams);
         if (seen.has(sig)) return false;
-        seen.add(sig);
-        return true;
+        seen.add(sig); return true;
       });
-      const fresh = candidates.filter(a => teamsSignature(a.teams) !== currentSig);
-      if (fresh.length > 0) candidates = fresh;
-      const chosen = candidates[Math.floor(Math.random() * candidates.length)];
-
-      generatedTeams = chosen.teams.map((t, i) => ({
-        ...getTeamDetails(i),
-        players: sortTeamTactically(t.players)
-      }));
-      renderCurrentView();
+      const fresh = fair.filter(a => signature(a.teams) !== avoidSignature);
+      if (fresh.length) fair = fresh;
+      const chosen = fair[Math.floor(Math.random() * fair.length)];
+      return chosen.teams.map(t => t.map(p => p.id));
     }
 
-    // When the squad changes (attendance ticked, player edited, change from another phone),
-    // update the existing teams instead of re-picking, so manual moves are kept.
-    function syncTeamsWithRoster() {
-      const attending = players.filter(p => p.attending);
-      if (generatedTeams.length !== numberOfTeams || attending.length < numberOfTeams) {
-        balanceTeams();
+    // The teams as they should look now: absent players dropped, new arrivals added
+    function resolveTeams(playersMap, current) {
+      if (!current) return null;
+      const attending = Object.values(playersMap).filter(p => p.attending);
+      const ids = new Set(attending.map(p => p.id));
+      const teams = current.teams.map(t => t.filter(id => ids.has(id)));
+      const placed = new Set(teams.flat());
+      const total = t => t.reduce((s, id) => s + (playersMap[id] ? playersMap[id].rating : 0), 0);
+      for (const p of attending.filter(p => !placed.has(p.id)).sort((a, b) => a.id.localeCompare(b.id))) {
+        let target = 0;
+        teams.forEach((t, i) => {
+          const tt = teams[target];
+          if (t.length < tt.length || (t.length === tt.length && total(t) < total(tt))) target = i;
+        });
+        teams[target].push(p.id);
+      }
+      return teams;
+    }
+    function teamsForWrite(teams, count, event) {
+      const out = { count, event, at: Date.now(), teams: {} };
+      teams.forEach((t, i) => { if (t.length) out.teams['t' + i] = t; });
+      if (!Object.keys(out.teams).length) return null;
+      return out;
+    }
+    // When attendance changes, keep the current teams and just update them
+    function addTeamUpdate(updates, playersMap) {
+      if (!state.current) return;
+      const teams = resolveTeams(playersMap, state.current);
+      const attending = Object.values(playersMap).filter(p => p.attending).length;
+      if (attending < state.current.count) { updates['current'] = null; return; }
+      updates['current'] = teamsForWrite(teams, state.current.count, state.current.event);
+    }
+
+    function pickNow() {
+      const pool = playerList().filter(p => p.attending);
+      if (pool.length < state.count) {
+        alert(`Mark at least ${state.count} player${state.count > 1 ? 's' : ''} as playing first.`);
         return;
       }
-      const byId = new Map(attending.map(p => [p.id, p]));
-      const placed = new Set();
-      generatedTeams.forEach(team => {
-        team.players = team.players.filter(p => byId.has(p.id)).map(p => byId.get(p.id));
-        team.players.forEach(p => placed.add(p.id));
+      const btn = document.getElementById('pick-btn');
+      btn.disabled = true; btn.textContent = 'Picking…';
+      setTimeout(() => {
+        const avoid = state.current ? signature(resolveTeams(state.players, state.current).map(t => t.map(id => ({ id })))) : null;
+        const teams = pickTeams(pool, state.count, state.event, avoid);
+        clearSelection();
+        write({ current: teamsForWrite(teams, state.count, state.event) }).finally(() => {
+          btn.disabled = false; renderControls();
+        });
+      }, 20);
+    }
+    function setCount(n) {
+      state.count = n;
+      renderControls();
+      if (state.current) pickNow();
+    }
+    function setEvent(e) {
+      state.event = e;
+      renderControls();
+      if (state.current) pickNow();
+    }
+
+    // Moving players by hand
+    function selectPlayer(id) {
+      if (state.selected && state.selected !== id) {
+        const teams = currentTeams();
+        const from = teams.findIndex(t => t.includes(state.selected));
+        const to = teams.findIndex(t => t.includes(id));
+        if (from !== -1 && to !== -1 && from !== to) { swapPlayers(state.selected, id); return; }
+      }
+      state.selected = state.selected === id ? null : id;
+      renderTeams(); renderMoveBar();
+    }
+    function clearSelection() { state.selected = null; renderTeams(); renderMoveBar(); }
+    function moveSelectedTo(teamIdx) {
+      const teams = currentTeams().map(t => [...t]);
+      const id = state.selected;
+      teams.forEach(t => { const i = t.indexOf(id); if (i !== -1) t.splice(i, 1); });
+      teams[teamIdx].push(id);
+      state.selected = null;
+      write({ current: teamsForWrite(teams, state.current.count, state.current.event) });
+      renderMoveBar();
+    }
+    function swapPlayers(a, b) {
+      const teams = currentTeams().map(t => t.map(id => id === a ? b : id === b ? a : id));
+      state.selected = null;
+      write({ current: teamsForWrite(teams, state.current.count, state.current.event) });
+      renderMoveBar();
+    }
+    function currentTeams() { return resolveTeams(state.players, state.current) || []; }
+
+    // Team names, venues, dates, meet times (saved for all devices)
+    function teamInfo(i) {
+      const t = state.teamInfo['t' + i] || {};
+      return { name: t.name || `Team ${i + 1}`, venue: t.venue || '', date: t.date || '', meetTime: t.meetTime || '' };
+    }
+    function saveTeamInfo(i, field, value) {
+      write({ [`settings/teams/t${i}/${field}`]: value.trim().slice(0, 60) || null });
+    }
+
+    // ------------------------------------------------------------------
+    // WhatsApp messages
+    // ------------------------------------------------------------------
+    function sortedTeamPlayers(ids) {
+      return ids.map(id => state.players[id]).filter(Boolean).sort((a, b) => {
+        const pa = a.positions.length ? POSITIONS.indexOf(a.positions[0]) : 9;
+        const pb = b.positions.length ? POSITIONS.indexOf(b.positions[0]) : 9;
+        return pa - pb || a.name.localeCompare(b.name);
       });
-      attending.filter(p => !placed.has(p.id)).forEach(p => {
-        const target = [...generatedTeams].sort((a, b) =>
-          a.players.length - b.players.length ||
-          a.players.reduce((s, x) => s + x.rating, 0) - b.players.reduce((s, x) => s + x.rating, 0)
-        )[0];
-        target.players.push(p);
+    }
+    function teamMessage(i, ids) {
+      const info = teamInfo(i);
+      const ps = sortedTeamPlayers(ids);
+      let text = `*${info.name}* (${ps.length} players)\n`;
+      text += `📍 *Venue:* ${info.venue || 'TBC'}\n`;
+      text += `📅 *Date:* ${info.date || 'TBC'}\n`;
+      text += `⏰ *Meet Time:* ${info.meetTime || 'TBC'}\n`;
+      text += `*Squad:*\n`;
+      ps.forEach(p => { text += `• ${p.name}\n`; });
+      return text;
+    }
+    function whatsAppAll() {
+      const teams = currentTeams();
+      const title = { match: '⚽ *MATCH DAY TEAMS & DETAILS* ⚽', training: '⚽ *TRAINING TEAMS* ⚽', festival: '🏆 *FESTIVAL TEAMS & DETAILS* 🏆' }[state.current.event];
+      return title + '\n\n' + teams.map((t, i) => teamMessage(i, t)).join('\n---------------------------\n\n').trim();
+    }
+    function copyText(text) {
+      const fallback = () => {
+        const box = document.getElementById('copy-box');
+        box.value = text;
+        document.getElementById('copy-dialog').showModal();
+        box.focus(); box.select();
+      };
+      if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(text).then(() => toast('Copied, ready to paste into WhatsApp'), fallback);
+      } else fallback();
+    }
+
+    // ------------------------------------------------------------------
+    // Backup
+    // ------------------------------------------------------------------
+    function downloadBackup() {
+      const data = { app: 'PitchBalancer', version: APP_VERSION, exportedAt: new Date().toISOString(), players: playerList() };
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `pitchbalancer-squad-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    }
+    function importFile(event) {
+      const file = event.target.files[0];
+      event.target.value = '';
+      if (!file) return;
+      file.text().then(text => {
+        let data;
+        try { data = JSON.parse(text); } catch (e) { alert("That file isn't a PitchBalancer backup."); return; }
+        const list = toList(Array.isArray(data) ? data : (data.players || data.roster || data));
+        const incoming = list.map(fromAnyFormat).filter(Boolean);
+        if (!incoming.length) { alert("That file doesn't contain any players."); return; }
+        if (!confirm(`Replace the whole squad with the ${incoming.length} players in this file?\n\nYou can undo this from Recent changes.`)) return;
+        const before = {};
+        for (const p of Object.values(state.players)) before[p.id] = storedForm(p);
+        const updates = {};
+        for (const id of Object.keys(state.players)) updates[`players/${id}`] = null;
+        const seen = new Set();
+        for (const p of incoming) {
+          let id = p.id; while (seen.has(id)) id = newId();
+          seen.add(id);
+          updates[`players/${id}`] = storedForm(p);
+        }
+        updates['current'] = null;
+        addHistory(updates, `Imported ${incoming.length} players from a backup file`, { scope: 'squad', before: JSON.stringify(before) });
+        write(updates).then(ok => { if (ok) toast(`Imported ${incoming.length} players`); });
       });
-      renderCurrentView();
     }
 
-    function renderCurrentView() {
-      if (generatedTeams.length === 0) {
-        document.getElementById('teams-output-container').innerHTML = `
-          <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-6 text-center text-sm text-slate-400">
-            Tick at least ${numberOfTeams} attending player${numberOfTeams > 1 ? 's' : ''} to pick ${numberOfTeams > 1 ? 'teams' : 'a team'}.
-          </div>`;
-        return;
-      }
-      if (currentView === 'whatsapp') renderWhatsAppView();
-      else if (currentView === 'basic') renderBasicView();
-      else renderDetailedView();
+    // ------------------------------------------------------------------
+    // Player editor
+    // ------------------------------------------------------------------
+    let edState = null;
+    function openEditor(id) {
+      const p = id ? state.players[id] : null;
+      edState = p
+        ? { id: p.id, isNew: false, rating: p.rating, positions: [...p.positions], traits: [...p.traits] }
+        : { id: newId(), isNew: true, rating: 5, positions: [], traits: [] };
+      document.getElementById('ed-title').textContent = p ? `Edit ${p.name}` : 'Add player';
+      document.getElementById('ed-name').value = p ? p.name : '';
+      document.getElementById('ed-coach').value = p ? p.coach : '';
+      document.getElementById('ed-attending').checked = p ? p.attending : true;
+      document.getElementById('ed-delete').hidden = !p;
+      const coaches = new Set([...PRIMARY_COACHES, ...Object.values(state.players).map(x => x.coach).filter(Boolean)]);
+      document.getElementById('coach-names').innerHTML = [...coaches].map(c => `<option value="${esc(c)}">`).join('');
+      renderEditorChips();
+      document.getElementById('editor').showModal();
+      if (!p) setTimeout(() => document.getElementById('ed-name').focus(), 50);
     }
-
-    function movePlayerOrder(teamIdx, playerIdx, direction) {
-      const team = generatedTeams[teamIdx];
-      if (!team) return;
-
-      const targetIdx = playerIdx + direction;
-      if (targetIdx < 0 || targetIdx >= team.players.length) return;
-
-      const [player] = team.players.splice(playerIdx, 1);
-      team.players.splice(targetIdx, 0, player);
-      renderCurrentView();
+    function closeEditor() { document.getElementById('editor').close(); edState = null; }
+    function stepScore(d) { edState.rating = clampScore(edState.rating + d); renderEditorChips(); }
+    function togglePosition(pos) {
+      const i = edState.positions.indexOf(pos);
+      if (i === -1) edState.positions.push(pos); else edState.positions.splice(i, 1);
+      renderEditorChips();
     }
-
-    function renderWhatsAppView() {
-      const container = document.getElementById('teams-output-container');
-      container.innerHTML = `
-        <div class="bg-slate-900 border-2 border-slate-700/80 rounded-2xl p-4 sm:p-6 shadow-2xl space-y-4">
-          <div class="flex items-center justify-between pb-2 border-b border-slate-800">
-            <div>
-              <h3 class="text-sm font-bold text-white uppercase tracking-wider text-emerald-400">Match Day View</h3>
-              <p class="text-xs text-slate-400">Set individual venues & kick-off times per squad</p>
-            </div>
-            <button onclick="copyWhatsAppPost()" class="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold rounded-xl shadow transition text-xs flex items-center gap-1.5">
-              <span>📋</span> Copy All Details
-            </button>
-          </div>
-
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            ${generatedTeams.map((team, tIdx) => {
-              const theme = TEAM_THEMES[tIdx % TEAM_THEMES.length];
-              return `
-                <div class="bg-slate-950 border ${theme.border} rounded-xl p-4 shadow-sm flex flex-col justify-between space-y-3">
-                  <div>
-                    <div class="flex items-center justify-between pb-2 mb-2.5 border-b border-slate-800">
-                      <h3 class="text-base font-bold text-white tracking-tight flex items-center gap-2">
-                        <span class="h-2.5 w-2.5 rounded-full ${theme.pill}"></span>
-                        ${escapeHtml(team.name)}
-                      </h3>
-                      <span class="text-xs text-slate-400 font-medium">${team.players.length} players</span>
-                    </div>
-
-                    <div class="bg-slate-900/90 border border-slate-800/80 rounded-lg p-2.5 space-y-2 mb-3">
-                      <div>
-                        <label class="text-[9px] uppercase font-bold text-slate-400 block mb-0.5">📍 Location / Pitch</label>
-                        <input type="text" value="${escapeHtml(team.venue || '')}"
-                               oninput="updateTeamDetail(${tIdx}, 'venue', this.value)"
-                               placeholder="e.g. Pitch 2, Main Ground..."
-                               class="w-full bg-slate-950 border border-slate-700/80 rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-emerald-500 font-medium">
-                      </div>
-                      <div class="grid grid-cols-2 gap-2">
-                        <div>
-                          <label class="text-[9px] uppercase font-bold text-slate-400 block mb-0.5">📅 Date</label>
-                          <input type="text" value="${escapeHtml(team.date || '')}"
-                                 oninput="updateTeamDetail(${tIdx}, 'date', this.value)"
-                                 placeholder="e.g. Sat 26th"
-                                 class="w-full bg-slate-950 border border-slate-700/80 rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-emerald-500 font-medium">
-                        </div>
-                        <div>
-                          <label class="text-[9px] uppercase font-bold text-slate-400 block mb-0.5">⏰ Meet / Kick-off</label>
-                          <input type="text" value="${escapeHtml(team.meetTime || '')}"
-                                 oninput="updateTeamDetail(${tIdx}, 'meetTime', this.value)"
-                                 placeholder="e.g. 09:30 Meet"
-                                 class="w-full bg-slate-950 border border-slate-700/80 rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-emerald-500 font-medium">
-                        </div>
-                      </div>
-                    </div>
-
-                    <ul class="space-y-2 pl-1">
-                      ${team.players.map(p => `
-                        <li class="text-[20px] font-bold text-slate-100 flex items-center gap-2.5 leading-tight">
-                          <span class="${theme.text} text-base leading-none">•</span>
-                          <span>${escapeHtml(p.name)}</span>
-                        </li>
-                      `).join('')}
-                    </ul>
-                  </div>
-
-                  <button onclick="copySingleTeamWhatsApp(${tIdx})" class="w-full py-1 text-[11px] font-semibold text-slate-400 hover:text-white bg-slate-900 hover:bg-slate-800 rounded-lg border border-slate-800 transition flex items-center justify-center gap-1">
-                    <span>📋</span> Copy Only ${escapeHtml(team.name)}
-                  </button>
-                </div>
-              `;
-            }).join('')}
-          </div>
-
-          <p class="text-[11px] text-center text-slate-500 pt-2 border-t border-slate-800">
-            📸 Screengrab ready for WhatsApp parent groups.
-          </p>
-        </div>
-      `;
+    function toggleTrait(t) {
+      const i = edState.traits.indexOf(t);
+      if (i === -1) edState.traits.push(t); else edState.traits.splice(i, 1);
+      renderEditorChips();
     }
-
-    function updateTeamDetail(teamIdx, field, value) {
-      if (generatedTeams[teamIdx]) {
-        generatedTeams[teamIdx][field] = value;
-        saveTeamDetail(teamIdx, field, value);
-      }
-    }
-
-    function renderBasicView() {
-      const container = document.getElementById('teams-output-container');
-      container.innerHTML = `
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          ${generatedTeams.map((team, tIdx) => {
-            const theme = TEAM_THEMES[tIdx % TEAM_THEMES.length];
-
-            return `
-              <div class="team-drop-zone bg-slate-900/90 border ${theme.border} rounded-2xl p-4 shadow-xl flex flex-col justify-between"
-                   data-team-index="${tIdx}"
-                   ondragover="handleDragOver(event)"
-                   ondragleave="handleDragLeave(event)"
-                   ondrop="handleDrop(event, ${tIdx})">
-                <div>
-                  <div class="flex items-center justify-between pb-2 border-b border-slate-800/80 mb-2">
-                    <div>
-                      <input type="text" value="${escapeHtml(team.name)}" onchange="renameTeam(${tIdx}, this.value)"
-                             class="bg-transparent font-bold text-sm sm:text-base text-white hover:border-b border-dashed border-slate-600 focus:outline-none focus:border-solid focus:border-emerald-400">
-                      <div class="text-xs text-slate-400 mt-0.5">
-                        ${team.players.length} players
-                      </div>
-                    </div>
-                    <div class="h-3 w-3 rounded-full ${theme.pill}"></div>
-                  </div>
-
-
-                  <div class="space-y-2 min-h-[120px]">
-                    ${team.players.map((player, pIdx) => `
-                      <div draggable="true"
-                           data-player-id="${player.id}"
-                           data-player-index="${pIdx}"
-                           data-team-index="${tIdx}"
-                           ondragstart="handleDragStart(event, '${player.id}', ${tIdx})"
-                           ondragend="handleDragEnd(event)"
-                           class="touch-card flex items-center justify-between bg-slate-950/80 border border-slate-800 p-2.5 sm:p-3 rounded-xl cursor-grab active:cursor-grabbing hover:border-slate-700 transition shadow-sm select-none">
-                        <div class="flex items-center gap-2.5 min-w-0">
-                          <div class="flex flex-col gap-0.5 shrink-0">
-                            <button onclick="movePlayerOrder(${tIdx}, ${pIdx}, -1)" ${pIdx === 0 ? 'disabled class="opacity-20 cursor-not-allowed"' : 'class="hover:text-emerald-400 text-slate-400 active:scale-110 transition"'} title="Move up">
-                              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 15l7-7 7 7"></path></svg>
-                            </button>
-                            <button onclick="movePlayerOrder(${tIdx}, ${pIdx}, 1)" ${pIdx === team.players.length - 1 ? 'disabled class="opacity-20 cursor-not-allowed"' : 'class="hover:text-emerald-400 text-slate-400 active:scale-110 transition"'} title="Move down">
-                              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"></path></svg>
-                            </button>
-                          </div>
-
-                          <span class="text-[20px] font-bold text-white tracking-wide truncate leading-none">${escapeHtml(player.name)}</span>
-                          ${player.coach ? `
-                            <span class="text-[10px] px-2 py-0.5 rounded bg-indigo-500/20 border border-indigo-500/40 text-indigo-300 font-semibold shrink-0">
-                              👔 ${escapeHtml(player.coach)}
-                            </span>
-                          ` : ''}
-                        </div>
-
-                        <button onclick="openTransferModal('${player.id}', ${tIdx})" class="px-2.5 py-1.5 text-xs bg-slate-800 hover:bg-slate-700 active:bg-emerald-600 text-slate-300 hover:text-white rounded-lg border border-slate-700 transition shrink-0 font-bold" title="Transfer to another team">
-                          ⇄
-                        </button>
-                      </div>
-                    `).join('')}
-                  </div>
-                </div>
-                <p class="text-[10px] text-center text-slate-500 mt-4 border-t border-slate-800/40 pt-2">
-                  Use ▲ / ▼ to reorder · drag a card (press and hold on a phone) or tap ⇄ to move teams
-                </p>
-              </div>
-            `;
-          }).join('')}
-        </div>
-      `;
-    }
-
-    function renderDetailedView() {
-      const container = document.getElementById('teams-output-container');
-      container.innerHTML = `
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          ${generatedTeams.map((team, tIdx) => {
-            const totalRating = team.players.reduce((acc, p) => acc + p.rating, 0);
-            const avgRating = team.players.length > 0 ? (totalRating / team.players.length).toFixed(1) : 0;
-            const theme = TEAM_THEMES[tIdx % TEAM_THEMES.length];
-
-            const firstChoice = pos => team.players.filter(p => getPositions(p)[0] === pos).length;
-
-            return `
-              <div class="team-drop-zone bg-slate-900/90 border ${theme.border} rounded-2xl p-4 shadow-xl flex flex-col justify-between"
-                   data-team-index="${tIdx}"
-                   ondragover="handleDragOver(event)"
-                   ondragleave="handleDragLeave(event)"
-                   ondrop="handleDrop(event, ${tIdx})">
-                <div>
-                  <div class="flex items-center justify-between pb-2 border-b border-slate-800/80 mb-2">
-                    <div>
-                      <input type="text" value="${escapeHtml(team.name)}" onchange="renameTeam(${tIdx}, this.value)"
-                             class="bg-transparent font-bold text-sm sm:text-base text-white hover:border-b border-dashed border-slate-600 focus:outline-none focus:border-solid focus:border-emerald-400">
-                      <div class="text-xs text-slate-400 mt-0.5">
-                        ${team.players.length} players &bull; Total: <span class="text-emerald-400 font-semibold">${totalRating}</span> &bull; Avg: <span class="text-slate-300">${avgRating}</span>
-                      </div>
-                    </div>
-                    <div class="h-3 w-3 rounded-full ${theme.pill}"></div>
-                  </div>
-
-                  <div class="mb-2 px-2 py-1.5 rounded-lg bg-slate-950/40 border border-slate-800/60 flex items-center justify-between text-[11px] text-slate-400" title="Players whose 1st choice is each position">
-                    <span>GK: <b class="text-amber-300">${firstChoice("Goalkeeper")}</b></span>
-                    <span>DEF: <b class="text-blue-300">${firstChoice("Defender")}</b></span>
-                    <span>MID: <b class="text-emerald-300">${firstChoice("Midfield")}</b></span>
-                    <span>WIN: <b class="text-cyan-300">${firstChoice("Winger")}</b></span>
-                    <span>STR: <b class="text-rose-300">${firstChoice("Striker")}</b></span>
-                  </div>
-
-                  ${coachSummaryHtml(team)}
-
-                  <div class="space-y-2 min-h-[120px]">
-                    ${team.players.map((player, pIdx) => `
-                      <div draggable="true"
-                           data-player-id="${player.id}"
-                           data-player-index="${pIdx}"
-                           data-team-index="${tIdx}"
-                           ondragstart="handleDragStart(event, '${player.id}', ${tIdx})"
-                           ondragend="handleDragEnd(event)"
-                           class="touch-card flex flex-col gap-1.5 bg-slate-950/80 border border-slate-800 p-2 sm:p-2.5 rounded-xl cursor-grab active:cursor-grabbing hover:border-slate-700 transition shadow-sm select-none">
-
-                        <div class="flex items-center justify-between">
-                          <div class="flex items-center gap-2 min-w-0">
-                            <div class="flex flex-col gap-0.5 shrink-0">
-                              <button onclick="movePlayerOrder(${tIdx}, ${pIdx}, -1)" ${pIdx === 0 ? 'disabled class="opacity-20 cursor-not-allowed"' : 'class="hover:text-emerald-400 text-slate-400 active:scale-110 transition"'} title="Move up">
-                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 15l7-7 7 7"></path></svg>
-                              </button>
-                              <button onclick="movePlayerOrder(${tIdx}, ${pIdx}, 1)" ${pIdx === team.players.length - 1 ? 'disabled class="opacity-20 cursor-not-allowed"' : 'class="hover:text-emerald-400 text-slate-400 active:scale-110 transition"'} title="Move down">
-                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"></path></svg>
-                              </button>
-                            </div>
-
-                            <span class="text-[19px] font-bold text-white tracking-wide truncate leading-none">${escapeHtml(player.name)}</span>
-                            ${player.coach ? `
-                              <span class="text-[9px] px-1.5 py-0.5 rounded bg-indigo-500/20 border border-indigo-500/40 text-indigo-300 font-medium shrink-0">
-                                👔 ${escapeHtml(player.coach)}
-                              </span>
-                            ` : ''}
-                          </div>
-
-                          <div class="flex items-center gap-1.5 shrink-0">
-                            <span class="px-2 py-0.5 text-xs font-bold rounded-md bg-black border border-slate-700 text-slate-200">
-                              ${player.rating}
-                            </span>
-                            <button onclick="openTransferModal('${player.id}', ${tIdx})" class="px-2 py-0.5 text-xs bg-slate-800 hover:bg-slate-700 active:bg-emerald-600 text-slate-300 rounded border border-slate-700" title="Transfer Player">
-                              ⇄
-                            </button>
-                          </div>
-                        </div>
-
-                        ${playerTagsHtml(player)}
-                      </div>
-                    `).join('')}
-                  </div>
-                </div>
-                <p class="text-[10px] text-center text-slate-500 mt-4 border-t border-slate-800/40 pt-2">
-                  Use ▲ / ▼ to reorder · drag a card (press and hold on a phone) or tap ⇄ to move teams
-                </p>
-              </div>
-            `;
-          }).join('')}
-        </div>
-      `;
-    }
-
-    function renameTeam(idx, newName) {
-      if (generatedTeams[idx]) {
-        generatedTeams[idx].name = newName;
-        saveTeamDetail(idx, 'name', newName);
-      }
-    }
-
-    function openTransferModal(playerId, currentTeamIdx) {
-      pendingTransferPlayer = { playerId, currentTeamIdx };
-      let playerObj = null;
-      generatedTeams[currentTeamIdx].players.forEach(p => { if (p.id === playerId) playerObj = p; });
-      if (!playerObj) return;
-
-      document.getElementById('transfer-player-name').textContent = playerObj.name;
-      const listContainer = document.getElementById('transfer-teams-list');
-
-      if (generatedTeams.length < 2) { alert("There's only one team. Pick 2 or more teams to move players between them."); return; }
-      listContainer.innerHTML = generatedTeams.map((t, idx) => {
-        if (idx === currentTeamIdx) return '';
-        const theme = TEAM_THEMES[idx % TEAM_THEMES.length];
-        return `
-          <button onclick="executeTransfer(${idx})" class="w-full flex items-center justify-between p-3 rounded-xl bg-slate-950 border ${theme.border} hover:bg-slate-900 transition text-left">
-            <span class="text-sm font-semibold text-white flex items-center gap-2">
-              <span class="h-2 w-2 rounded-full ${theme.pill}"></span>
-              ${escapeHtml(t.name)}
-            </span>
-            <span class="text-xs text-slate-400 font-medium">Move here →</span>
-          </button>
-        `;
+    function renderEditorChips() {
+      document.getElementById('ed-score').textContent = edState.rating;
+      document.getElementById('ed-positions').innerHTML = POSITIONS.map(pos => {
+        const r = edState.positions.indexOf(pos);
+        return `<button type="button" class="poschip ${r !== -1 ? 'on' : ''}" onclick="togglePosition('${pos}')">${r !== -1 ? `<span class="n">${r + 1}</span>` : ''}${POSITION_NAMES[pos]}</button>`;
       }).join('');
-
-      document.getElementById('transfer-modal').classList.remove('hidden');
+      document.getElementById('ed-traits').innerHTML = TRAITS.map(t =>
+        `<button type="button" class="poschip ${edState.traits.includes(t) ? 'on' : ''}" onclick="toggleTrait('${t}')">${edState.traits.includes(t) ? '✓ ' : ''}${t}</button>`
+      ).join('');
+    }
+    function saveEditor() {
+      const name = document.getElementById('ed-name').value.trim();
+      if (!name) { alert('Please enter a name.'); return; }
+      const clash = Object.values(state.players).find(x => x.id !== edState.id && sameName(x.name, name));
+      if (clash && !confirm(`There's already a player called ${clash.name}. Save anyway?`)) return;
+      const p = cleanPlayer(edState.id, {
+        name, rating: edState.rating, positions: edState.positions, traits: edState.traits,
+        coach: document.getElementById('ed-coach').value, attending: document.getElementById('ed-attending').checked
+      });
+      const isNew = edState.isNew;
+      closeEditor();
+      Promise.resolve(savePlayer(p, isNew)).then(ok => { if (ok) toast(isNew ? `Added ${p.name}` : `Saved ${p.name}`); });
+    }
+    function deleteFromEditor() {
+      const p = state.players[edState.id];
+      if (!p || !confirm(`Delete ${p.name}? You can undo this from Recent changes.`)) return;
+      closeEditor();
+      deletePlayer(p.id);
     }
 
-    function closeTransferModal() {
-      document.getElementById('transfer-modal').classList.add('hidden');
-      pendingTransferPlayer = null;
-    }
-
-    function executeTransfer(targetTeamIdx) {
-      if (!pendingTransferPlayer) return;
-      const { playerId, currentTeamIdx } = pendingTransferPlayer;
-      const sourceTeam = generatedTeams[currentTeamIdx];
-      const targetTeam = generatedTeams[targetTeamIdx];
-
-      const pIdx = sourceTeam.players.findIndex(p => p.id === playerId);
-      if (pIdx > -1) {
-        const [player] = sourceTeam.players.splice(pIdx, 1);
-        targetTeam.players.push(player);
+    // ------------------------------------------------------------------
+    // Drawing the screen
+    // ------------------------------------------------------------------
+    function showTab(name) {
+      for (const t of ['teams', 'squad']) {
+        document.getElementById('tab-' + t).hidden = t !== name;
+        document.getElementById('tab-btn-' + t).setAttribute('aria-selected', String(t === name));
       }
-      closeTransferModal();
-      renderCurrentView();
+      if (name !== 'teams') clearSelection();
+    }
+    function renderAll() { renderStatus(); renderAttendance(); renderControls(); renderTeams(); renderSquad(); renderHistory(); renderMoveBar(); }
+
+    function renderStatus() {
+      const el = document.getElementById('status');
+      let cls = '', text = 'Connecting…';
+      if (!db) { cls = 'bad'; text = "Can't connect"; }
+      else if (state.outdated) { cls = 'bad'; text = 'Update needed'; }
+      else if (!state.online && state.connectedOnce) { cls = 'busy'; text = state.pending ? `Offline · ${state.pending} waiting` : 'Offline'; }
+      else if (state.online && state.pending) { cls = 'busy'; text = 'Saving…'; }
+      else if (state.online) { cls = 'ok'; text = '✓ Saved'; }
+      el.className = 'status ' + cls; el.textContent = text;
+      el.title = (!state.online && state.connectedOnce) ? 'Changes are kept on this device and will save when you are back online' : '';
+      const off = document.getElementById('offline-banner');
+      if (!db) { off.hidden = false; document.getElementById('offline-text').textContent = "Can't reach the database. Check your internet connection and reload."; }
     }
 
-    // Phone dragging: press and hold a player card for a moment, then drag.
-    // A normal swipe still scrolls the page.
-    let touchCandidate = null;
-    let touchDraggingElement = null;
-    let touchClone = null;
-    let touchSourceTeam = null;
-    let touchHoldTimer = null;
-    let touchStartPoint = null;
-    const HOLD_MS = 300;
-
-    function clearTouchHighlights() {
-      document.querySelectorAll('.team-drop-zone').forEach(el => el.classList.remove('drag-over'));
-      document.querySelectorAll('.touch-card').forEach(el => el.classList.remove('drag-target-player'));
+    function renderAttendance() {
+      const list = playerList();
+      const n = list.filter(p => p.attending).length;
+      document.getElementById('attend-count').textContent = list.length ? `${n} of ${list.length}` : '';
+      const el = document.getElementById('attend-chips');
+      if (!state.playersLoaded) { el.innerHTML = '<span class="muted small">Loading squad…</span>'; return; }
+      if (!list.length) { el.innerHTML = '<span class="muted small">No players yet. Add them on the Squad tab, or import a backup file there.</span>'; return; }
+      el.innerHTML = list.map(p =>
+        `<button class="chip ${p.attending ? 'on' : ''}" onclick="setAttending('${p.id}', ${!p.attending})" aria-pressed="${p.attending}">${p.attending ? '✓ ' : ''}${esc(p.name)}</button>`
+      ).join('');
     }
 
-    function cancelTouchDrag() {
-      clearTimeout(touchHoldTimer);
-      touchHoldTimer = null;
-      if (touchClone) { touchClone.remove(); touchClone = null; }
-      if (touchDraggingElement) touchDraggingElement.classList.remove('dragging');
-      clearTouchHighlights();
-      touchCandidate = null;
-      touchDraggingElement = null;
-      touchSourceTeam = null;
+    function renderControls() {
+      for (const b of document.querySelectorAll('#seg-count button')) b.setAttribute('aria-pressed', String(Number(b.dataset.v) === state.count));
+      for (const b of document.querySelectorAll('#seg-event button')) b.setAttribute('aria-pressed', String(b.dataset.v === state.event));
+      const note = document.getElementById('rule-note');
+      if (state.count === 1) note.textContent = 'Everyone playing goes into one team.';
+      else if (coachRuleApplies(state.count, state.event)) note.textContent = 'Each team gets at least 2 coaches, then teams are balanced on ability, low scores, Development, keepers, positions and attributes.';
+      else note.textContent = 'Coaches are ignored. Teams are balanced on ability, low scores, Development, keepers, positions and attributes.';
+      const btn = document.getElementById('pick-btn');
+      if (!btn.disabled) btn.textContent = state.current ? '🔀 Re-pick teams' : 'Pick teams';
     }
 
-    function setupTouchDragAndDrop() {
-      document.addEventListener('touchstart', function(e) {
-        const card = e.target.closest('.touch-card');
-        if (!card || e.target.closest('button') || e.target.closest('input') || e.touches.length > 1) return;
-        const touch = e.touches[0];
-        touchCandidate = card;
-        touchStartPoint = { x: touch.clientX, y: touch.clientY };
-        clearTimeout(touchHoldTimer);
-        touchHoldTimer = setTimeout(() => {
-          if (!touchCandidate) return;
-          touchDraggingElement = touchCandidate;
-          touchSourceTeam = parseInt(touchDraggingElement.getAttribute('data-team-index'), 10);
-          touchClone = touchDraggingElement.cloneNode(true);
-          touchClone.classList.add('touch-clone');
-          touchClone.style.width = touchDraggingElement.offsetWidth + 'px';
-          touchClone.style.left = touchStartPoint.x + 'px';
-          touchClone.style.top = touchStartPoint.y + 'px';
-          document.body.appendChild(touchClone);
-          touchDraggingElement.classList.add('dragging');
-          if (navigator.vibrate) navigator.vibrate(15);
-        }, HOLD_MS);
-      }, { passive: true });
+    function playerRow(p, teamIdx) {
+      const firsts = p.positions.slice(0, 2).map((pos, i) => `<span class="pos ${pos} ${i ? 'dim' : ''}">${pos}</span>`).join('');
+      const traits = p.traits.map(t => `<span class="trait ${t}">${t === 'Development' ? 'Dev' : t}</span>`).join('');
+      const coach = p.coach ? `<span class="coach-tag" title="Coach">👔 ${esc(p.coach)}</span>` : '';
+      return `<li><button class="pl ${state.selected === p.id ? 'sel' : ''}" onclick="selectPlayer('${p.id}')">
+        <span class="score ${p.rating <= LOW_SCORE ? 'low' : ''}">${p.rating}</span>
+        <span class="nm">${esc(p.name)}</span>${coach}${firsts}${traits}
+      </button></li>`;
+    }
 
-      document.addEventListener('touchmove', function(e) {
-        const touch = e.touches[0];
-        if (!touchDraggingElement) {
-          // Moved before the hold finished: it's a scroll, not a drag
-          if (touchCandidate && touchStartPoint &&
-              Math.hypot(touch.clientX - touchStartPoint.x, touch.clientY - touchStartPoint.y) > 10) {
-            cancelTouchDrag();
-          }
-          return;
+    function renderTeams() {
+      const el = document.getElementById('teams');
+      const copyWrap = document.getElementById('copy-all-wrap');
+      if (!state.current) {
+        el.className = 'teams';
+        el.innerHTML = state.playersLoaded && Object.keys(state.players).length
+          ? '<div class="card empty">Tick who\'s playing, choose the options above and tap <b>Pick teams</b>.</div>' : '';
+        copyWrap.hidden = true;
+        return;
+      }
+      const teams = currentTeams();
+      const coachRule = coachRuleApplies(state.current.count, state.current.event);
+      el.className = 'teams n' + teams.length;
+      copyWrap.hidden = teams.length < 2;
+      el.innerHTML = teams.map((ids, i) => {
+        const info = teamInfo(i);
+        const ps = sortedTeamPlayers(ids);
+        const total = ps.reduce((s, p) => s + p.rating, 0);
+        const avg = ps.length ? (total / ps.length).toFixed(1) : '0';
+        const keeper = ps.some(p => p.positions.includes('GK'));
+        const lowN = ps.filter(p => p.rating <= LOW_SCORE).length;
+        const devN = ps.filter(p => p.traits.includes('Development')).length;
+        const coachNames = [...new Map(ps.filter(p => p.coach).map(p => [p.coach.toLowerCase(), p.coach])).values()];
+        let coachStat = '';
+        if (coachRule) {
+          coachStat = `<span class="stat ${coachNames.length >= COACHES_NEEDED ? 'good' : 'warn'}">👔 ${coachNames.length ? esc(coachNames.join(', ')) : 'No coach'}${coachNames.length < COACHES_NEEDED ? ' · needs ' + (COACHES_NEEDED - coachNames.length) + ' more' : ''}</span>`;
         }
-        e.preventDefault(); // stop the page scrolling while dragging
-        touchClone.style.left = touch.clientX + 'px';
-        touchClone.style.top = touch.clientY + 'px';
-
-        const elemBelow = document.elementFromPoint(touch.clientX, touch.clientY);
-        clearTouchHighlights();
-        if (elemBelow) {
-          const targetCard = elemBelow.closest('.touch-card');
-          if (targetCard && targetCard !== touchDraggingElement) {
-            targetCard.classList.add('drag-target-player');
-          } else {
-            const zone = elemBelow.closest('.team-drop-zone');
-            if (zone) zone.classList.add('drag-over');
-          }
-        }
-      }, { passive: false });
-
-      document.addEventListener('touchend', function(e) {
-        if (!touchDraggingElement) { cancelTouchDrag(); return; }
-        const touch = e.changedTouches[0];
-        const dragged = touchDraggingElement;
-        const fromTeam = touchSourceTeam;
-        if (touchClone) touchClone.style.display = 'none';
-        const elemBelow = document.elementFromPoint(touch.clientX, touch.clientY);
-        cancelTouchDrag();
-
-        if (elemBelow) {
-          const targetCard = elemBelow.closest('.touch-card');
-          const targetZone = elemBelow.closest('.team-drop-zone');
-          const pId = dragged.getAttribute('data-player-id');
-
-          if (targetCard && targetCard !== dragged) {
-            const targetTeamIdx = parseInt(targetCard.getAttribute('data-team-index'), 10);
-            const targetPlayerIdx = parseInt(targetCard.getAttribute('data-player-index'), 10);
-            applyDropInsertion(fromTeam, pId, targetTeamIdx, targetPlayerIdx);
-          } else if (targetZone) {
-            const targetTeamIdx = parseInt(targetZone.getAttribute('data-team-index'), 10);
-            if (!isNaN(targetTeamIdx) && targetTeamIdx !== fromTeam) {
-              applyDropInsertion(fromTeam, pId, targetTeamIdx, null);
-            }
-          }
-        }
-      });
-
-      document.addEventListener('touchcancel', cancelTouchDrag);
-      // Stop the phone's long-press menu appearing on player cards
-      document.addEventListener('contextmenu', function(e) {
-        if (e.target.closest('.touch-card')) e.preventDefault();
-      });
+        const canMoveHere = state.selected && !ids.includes(state.selected);
+        return `<article class="team ${canMoveHere ? 'drop' : ''}">
+          <div class="team-head">
+            <input class="team-name" value="${esc(info.name)}" maxlength="40" aria-label="Team name" onchange="saveTeamInfo(${i}, 'name', this.value)">
+            <div class="stats">
+              <span class="stat">${ps.length} players</span>
+              <span class="stat">Total ${total} · avg ${avg}</span>
+              ${teams.length > 1 ? `<span class="stat ${keeper ? 'good' : 'warn'}">${keeper ? '🧤 Keeper' : '⚠ No keeper'}</span>` : ''}
+              ${teams.length > 1 && lowN ? `<span class="stat">${lowN} scored ≤${LOW_SCORE}</span>` : ''}
+              ${teams.length > 1 && devN ? `<span class="stat">${devN} Dev</span>` : ''}
+              ${coachStat}
+            </div>
+          </div>
+          <details class="team-info">
+            <summary>${info.venue || info.date || info.meetTime ? esc([info.date, info.venue, info.meetTime].filter(Boolean).join(' · ')) : 'Add date, venue and meet time'}</summary>
+            <div class="info-grid">
+              <label>Date<input class="field" value="${esc(info.date)}" placeholder="e.g. Sat 15 Nov" onchange="saveTeamInfo(${i}, 'date', this.value)"></label>
+              <label>Venue<input class="field" value="${esc(info.venue)}" placeholder="e.g. Danescourt pitch 1" onchange="saveTeamInfo(${i}, 'venue', this.value)"></label>
+              <label>Meet time<input class="field" value="${esc(info.meetTime)}" placeholder="e.g. 9:30 (10:00 KO)" onchange="saveTeamInfo(${i}, 'meetTime', this.value)"></label>
+            </div>
+          </details>
+          ${canMoveHere ? `<div style="padding:8px 14px 0"><button class="btn primary sm" style="width:100%" onclick="moveSelectedTo(${i})">Move here</button></div>` : ''}
+          <ul class="plist">${ps.map(p => playerRow(p, i)).join('')}</ul>
+          <div class="team-foot"><button class="btn sm" onclick="copyText(teamMessage(${i}, currentTeams()[${i}]))">📋 Copy for WhatsApp</button></div>
+        </article>`;
+      }).join('');
     }
 
-    function handleDragStart(e, playerId, teamIdx) {
-      draggedPlayerId = playerId;
-      sourceTeamIndex = teamIdx;
-      e.target.classList.add('dragging');
-      e.dataTransfer.setData('text/plain', playerId);
-    }
-    function handleDragEnd(e) {
-      e.target.classList.remove('dragging');
-      document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
-      document.querySelectorAll('.drag-target-player').forEach(el => el.classList.remove('drag-target-player'));
-    }
-    function handleDragOver(e) {
-      e.preventDefault();
-      const card = e.target.closest('.touch-card');
-      document.querySelectorAll('.drag-target-player').forEach(el => el.classList.remove('drag-target-player'));
-      if (card && card.getAttribute('data-player-id') !== draggedPlayerId) {
-        card.classList.add('drag-target-player');
-      } else {
-        const dropZone = e.currentTarget;
-        if (!dropZone.classList.contains('drag-over')) dropZone.classList.add('drag-over');
-      }
-    }
-    function handleDragLeave(e) {
-      e.currentTarget.classList.remove('drag-over');
-      const card = e.target.closest('.touch-card');
-      if (card) card.classList.remove('drag-target-player');
-    }
-    function handleDrop(e, targetTeamIndex) {
-      e.preventDefault();
-      e.currentTarget.classList.remove('drag-over');
-      document.querySelectorAll('.drag-target-player').forEach(el => el.classList.remove('drag-target-player'));
-
-      const targetCard = e.target.closest('.touch-card');
-      let targetPlayerIndex = null;
-      if (targetCard) {
-        targetPlayerIndex = parseInt(targetCard.getAttribute('data-player-index'), 10);
-      }
-
-      applyDropInsertion(sourceTeamIndex, draggedPlayerId, targetTeamIndex, targetPlayerIndex);
+    function renderMoveBar() {
+      const bar = document.getElementById('movebar');
+      const p = state.selected && state.players[state.selected];
+      if (!p || !state.current) { bar.hidden = true; return; }
+      const teams = currentTeams();
+      const from = teams.findIndex(t => t.includes(p.id));
+      document.getElementById('move-text').textContent = `Move ${p.name} to:`;
+      document.getElementById('move-buttons').innerHTML = teams.map((t, i) => i === from ? '' :
+        `<button class="btn primary sm" onclick="moveSelectedTo(${i})">${esc(teamInfo(i).name)}</button>`).join('') +
+        (teams.length > 1 ? '<span class="muted small">or tap a player on another team to swap</span>' : '');
+      bar.hidden = false;
     }
 
-    function applyDropInsertion(fromTeamIdx, pId, toTeamIdx, targetPlayerIdx) {
-      if (fromTeamIdx === null || isNaN(toTeamIdx)) return;
-
-      const sourceTeam = generatedTeams[fromTeamIdx];
-      const targetTeam = generatedTeams[toTeamIdx];
-      const fromIdx = sourceTeam.players.findIndex(p => p.id === pId);
-      if (fromIdx === -1) return;
-
-      const [player] = sourceTeam.players.splice(fromIdx, 1);
-
-      if (targetPlayerIdx !== null && !isNaN(targetPlayerIdx)) {
-        targetTeam.players.splice(targetPlayerIdx, 0, player);
-      } else {
-        targetTeam.players.push(player);
-      }
-
-      renderCurrentView();
+    function renderSquad() {
+      const q = document.getElementById('search').value.trim().toLowerCase();
+      const all = playerList();
+      document.getElementById('squad-count').textContent = all.length ? `${all.length} players` : '';
+      const list = all.filter(p => !q || p.name.toLowerCase().includes(q) || (p.coach || '').toLowerCase().includes(q));
+      const el = document.getElementById('squad-list');
+      if (!state.playersLoaded) { el.innerHTML = '<div class="empty">Loading squad…</div>'; return; }
+      if (!list.length) { el.innerHTML = `<div class="empty">${all.length ? 'No players match that search.' : 'No players yet. Tap “+ Add player”, or import a backup file below.'}</div>`; return; }
+      el.innerHTML = list.map(p => `
+        <button class="sq ${p.attending ? '' : 'away'}" onclick="openEditor('${p.id}')">
+          <span class="score ${p.rating <= LOW_SCORE ? 'low' : ''}">${p.rating}</span>
+          <span>
+            <b>${esc(p.name)}</b>${p.coach ? ` <span class="coach-tag">👔 ${esc(p.coach)}${isPrimaryCoach(p.coach) ? '' : ' (backup)'}</span>` : ''}
+            <span class="meta">
+              ${p.positions.map((pos, i) => `<span class="pos ${pos} ${i ? 'dim' : ''}">${i + 1}. ${pos}</span>`).join('') || '<span class="muted small">No positions set</span>'}
+              ${p.traits.map(t => `<span class="trait ${t}">${t}</span>`).join('')}
+            </span>
+          </span>
+          <span class="muted small">${p.attending ? 'Playing' : 'Out'}</span>
+        </button>`).join('');
     }
 
-    function copyWhatsAppPost() {
-      if (!generatedTeams || generatedTeams.length === 0) return;
-      let text = `⚽ *MATCH DAY TEAMS & DETAILS* ⚽\n\n`;
-
-      generatedTeams.forEach((team) => {
-        text += `*${team.name}* (${team.players.length} players)\n`;
-        text += `📍 *Venue:* ${team.venue || 'TBC'}\n`;
-        text += `📅 *Date:* ${team.date || 'TBC'}\n`;
-        text += `⏰ *Meet Time:* ${team.meetTime || 'TBC'}\n`;
-        text += `*Squad:*\n`;
-        team.players.forEach(p => { text += `• ${p.name}\n`; });
-        text += `\n---------------------------\n\n`;
-      });
-
-      navigator.clipboard.writeText(text.trim()).then(() => {
-        alert("All match details and teams copied to clipboard!");
-      });
+    function renderHistory() {
+      const el = document.getElementById('history');
+      if (!state.history.length) { el.innerHTML = '<li class="muted">No changes yet.</li>'; return; }
+      const fmt = ts => {
+        if (!ts) return '';
+        const d = new Date(ts), now = new Date();
+        const time = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+        return d.toDateString() === now.toDateString() ? `Today ${time}` : `${d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} ${time}`;
+      };
+      el.innerHTML = state.history.slice(0, 30).map(h => {
+        const undoable = !h.undone && !String(h.text || '').startsWith('Undid') && (h.playerId || h.scope === 'squad') && !String(h.text || '').startsWith('Brought');
+        return `<li>
+          <span><time>${fmt(h.at)}</time><span class="${h.undone ? 'undone' : ''}">${esc(h.text)}</span></span>
+          ${undoable ? `<button class="btn sm" onclick="undoHistory('${esc(h.key)}')">Undo</button>` : (h.undone ? '<span class="muted small">Undone</span>' : '')}
+        </li>`;
+      }).join('');
     }
 
-    function copySingleTeamWhatsApp(tIdx) {
-      const team = generatedTeams[tIdx];
-      if (!team) return;
-
-      let text = `⚽ *MATCH DETAILS: ${team.name.toUpperCase()}* ⚽\n\n`;
-      text += `📍 *Venue:* ${team.venue || 'TBC'}\n`;
-      text += `📅 *Date:* ${team.date || 'TBC'}\n`;
-      text += `⏰ *Meet Time:* ${team.meetTime || 'TBC'}\n\n`;
-      text += `*Squad (${team.players.length} players):*\n`;
-      team.players.forEach(p => { text += `• ${p.name}\n`; });
-
-      navigator.clipboard.writeText(text.trim()).then(() => {
-        alert(`Copied lineup and details for ${team.name}!`);
-      });
-    }
-
-    function escapeHtml(string) {
-      const div = document.createElement('div');
-      div.textContent = string;
-      return div.innerHTML;
-    }
-
-    window.onload = init;
+    window.addEventListener('keydown', e => { if (e.key === 'Escape' && state.selected) clearSelection(); });
+    init();
   </script>
 </body>
 </html>
