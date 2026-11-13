@@ -904,19 +904,21 @@
     function teamMessage(i, ids) {
       const info = teamInfo(i);
       const ps = sortedTeamPlayers(ids);
-      let text = `*${info.name}* (${ps.length} players)\n`;
-      text += `📍 *Venue:* ${info.venue || 'TBC'}\n`;
-      text += `📅 *Date:* ${info.date || 'TBC'}\n`;
-      text += `🏃 *Warm-up:* ${info.warmUp || 'TBC'}\n`;
-      text += `⚽ *Kick-off:* ${info.kickOff || 'TBC'}\n`;
-      text += `*Squad:*\n`;
-      ps.forEach(p => { text += `• ${p.name}\n`; });
-      return text;
+      return [
+        `*${info.name}*`,
+        '',
+        `📍 *Venue:* ${info.venue || 'TBC'}`,
+        `📅 *Date:* ${info.date || 'TBC'}`,
+        `🏃 *Warm-up:* ${info.warmUp || 'TBC'}`,
+        `⚽ *Kick-off:* ${info.kickOff || 'TBC'}`,
+        '',
+        ...ps.map(p => `• ${p.name}`)
+      ].join('\n');
     }
     function whatsAppAll() {
       const teams = currentTeams();
       const title = { match: '⚽ *MATCH DAY TEAMS & DETAILS* ⚽', training: '⚽ *TRAINING TEAMS* ⚽', festival: '🏆 *FESTIVAL TEAMS & DETAILS* 🏆' }[state.current.event];
-      return title + '\n\n' + teams.map((t, i) => teamMessage(i, t)).join('\n---------------------------\n\n').trim();
+      return title + '\n\n' + teams.map((t, i) => teamMessage(i, t)).join('\n\n---------------------------\n\n');
     }
     function copyText(text) {
       const fallback = () => {
