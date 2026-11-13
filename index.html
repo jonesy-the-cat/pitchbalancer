@@ -361,6 +361,7 @@
     const OLD_POSITION_CODES = { Goalkeeper: 'GK', Defender: 'DEF', Midfield: 'MID', Winger: 'WIN', Striker: 'STR' };
     const TRAITS = ['Creative', 'Tackler', 'Pace', 'Development'];
     const SHARED_TRAITS = ['Creative', 'Tackler', 'Pace'];
+    const OTHER_TRAITS = ['Creative', 'Pace'];   // Tackler has its own, higher rule
     const KNOWN_COACHES = ['Ian', 'Mark', 'James', 'Craig'];   // suggestions in the coach box; every coach counts the same
     const COACHES_NEEDED = 2;
     const LOW_SCORE = 3;                 // players scored this or lower are shared equally
@@ -741,9 +742,10 @@
         Math.round(spread(strengths) * 10),                            // rule 3: ability (average per player, passengers as 0)
         spread(low),                                                   // rule 4: players scored 3 or under
         spread(dev),                                                   // rule 5: Development players apart
+        spread(traitCounts.Tackler),                                   // Tacklers (defensive base) shared out
         keeperMissing,                                                 // rule 6: a keeper per team
         positionsMissing,                                              // rule 7: positions covered
-        SHARED_TRAITS.reduce((s, t) => s + spread(traitCounts[t]), 0), // rule 8: Creative / Tackler / Pace
+        OTHER_TRAITS.reduce((s, t) => s + spread(traitCounts[t]), 0),  // rule 8: Creative / Pace
         Math.round(fine * 10)                                          // tie-break: position strength, coaches spread
       ];
     }
@@ -804,7 +806,7 @@
       // Any line-up that matches the best on all 8 rules is equally fair; pick one at random
       const seen = new Set();
       let fair = attempts.filter(a => {
-        if (compare(a.score.slice(0, 8), best.slice(0, 8)) !== 0) return false;
+        if (compare(a.score.slice(0, 9), best.slice(0, 9)) !== 0) return false;
         const sig = signature(a.teams);
         if (seen.has(sig)) return false;
         seen.add(sig); return true;
