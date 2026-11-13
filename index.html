@@ -123,6 +123,12 @@
     .movebar .wrap { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 0; }
 
     .squad-list { display: grid; gap: 6px; }
+    .squad-tools { display: grid; grid-template-columns: 1fr auto; gap: 8px; margin-bottom: 10px; align-items: end; }
+    .sort-label { display: grid; gap: 3px; font-size: 12px; font-weight: 700; color: var(--muted); }
+    .sort-label select { min-width: 190px; }
+    @media (max-width: 520px) { .squad-tools { grid-template-columns: 1fr; } .sort-label select { min-width: 0; } }
+    .group-head { margin: 10px 2px 2px; font-size: 12.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); display: flex; justify-content: space-between; }
+    .group-head:first-child { margin-top: 0; }
     .sq { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: center; padding: 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg); width: 100%; text-align: left; }
     .sq:hover { border-color: #3a4c70; }
     .sq .meta { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 3px; }
@@ -249,7 +255,18 @@
             <h2>Squad <span id="squad-count" class="muted small"></span></h2>
             <button class="btn primary sm" onclick="openEditor(null)">+ Add player</button>
           </div>
-          <input id="search" class="field" type="search" placeholder="Search players…" oninput="renderSquad()" style="margin-bottom:10px">
+          <div class="squad-tools">
+            <input id="search" class="field" type="search" placeholder="Search players…" oninput="renderSquad()">
+            <label class="sort-label">Sort by
+              <select id="squad-sort" class="field" onchange="setSquadSort(this.value)">
+                <option value="name">Name (A–Z)</option>
+                <option value="ability-high">Ability (highest first)</option>
+                <option value="ability-low">Ability (lowest first)</option>
+                <option value="position">Position (best position)</option>
+                <option value="attribute">Attribute</option>
+              </select>
+            </label>
+          </div>
           <div id="squad-list" class="squad-list"></div>
         </div>
 
@@ -668,6 +685,15 @@
     // ------------------------------------------------------------------
     // Team picking
     // ------------------------------------------------------------------
+    // A Development player scored 1 has little or no effect on a game: count them as 0
+    function isPassenger(p) { return p.rating === 1 && p.traits.includes('Development'); }
+    function effectiveRating(p) { return isPassenger(p) ? 0 : p.rating; }
+    // Team strength = average per player (passengers as 0). With rolling subs everyone gets
+    // similar pitch time, so the average is what the team is like on the pitch.
+    function teamStrength(players) {
+      return players.length ? players.reduce((s, p) => s + effectiveRating(p), 0) / players.length : 0;
+    }
+
     function coachRuleApplies(count, event) {
       return count === 2 && event !== 'training';
     }
@@ -675,19 +701,18 @@
     // Scores a set of teams as a list of numbers, most important first.
     // Lower is better; two line-ups are compared number by number.
     function evaluate(teams, coachRule) {
-      const totals = [], low = [], dev = [], coachCounts = [];
+      const strengths = [], low = [], dev = [], pas = [], coachCounts = [];
       const traitCounts = { Creative: [], Tackler: [], Pace: [] };
       const strength = { GK: [], DEF: [], MID: [], WIN: [], STR: [] };
       let coachShort = 0, keeperMissing = 0, positionsMissing = 0;
 
       for (const team of teams) {
-        let total = 0, lowN = 0, devN = 0, hasKeeper = false;
+        let lowN = 0, devN = 0, hasKeeper = false;
         const covered = { DEF: false, MID: false, WIN: false, STR: false };
         const tc = { Creative: 0, Tackler: 0, Pace: 0 };
         const st = { GK: 0, DEF: 0, MID: 0, WIN: 0, STR: 0 };
         const coaches = new Set();
         for (const p of team) {
-          total += p.rating;
           if (p.rating <= LOW_SCORE) lowN++;
           if (p.traits.includes('Development')) devN++;
           p.positions.forEach((pos, rank) => {
@@ -698,7 +723,7 @@
           for (const t of SHARED_TRAITS) if (p.traits.includes(t)) tc[t]++;
           if (coachRule && p.coach) coaches.add(p.coach.trim().toLowerCase());
         }
-        totals.push(total); low.push(lowN); dev.push(devN);
+        strengths.push(teamStrength(team)); low.push(lowN); dev.push(devN); pas.push(team.filter(isPassenger).length);
         if (!hasKeeper) keeperMissing++;
         for (const pos of OUTFIELD) if (!covered[pos]) positionsMissing++;
         for (const t of SHARED_TRAITS) traitCounts[t].push(tc[t]);
@@ -712,7 +737,8 @@
       if (coachRule) fine += spread(coachCounts);
       return [
         coachShort,                                                    // rule 2: coaches
-        spread(totals),                                                // rule 3: ability
+        spread(pas),                                                   // Development players scored 1 split evenly
+        Math.round(spread(strengths) * 10),                            // rule 3: ability (average per player, passengers as 0)
         spread(low),                                                   // rule 4: players scored 3 or under
         spread(dev),                                                   // rule 5: Development players apart
         keeperMissing,                                                 // rule 6: a keeper per team
@@ -778,7 +804,7 @@
       // Any line-up that matches the best on all 8 rules is equally fair; pick one at random
       const seen = new Set();
       let fair = attempts.filter(a => {
-        if (compare(a.score.slice(0, 7), best.slice(0, 7)) !== 0) return false;
+        if (compare(a.score.slice(0, 8), best.slice(0, 8)) !== 0) return false;
         const sig = signature(a.teams);
         if (seen.has(sig)) return false;
         seen.add(sig); return true;
@@ -796,7 +822,7 @@
       const ids = new Set(attending.map(p => p.id));
       const teams = current.teams.map(t => t.filter(id => ids.has(id)));
       const placed = new Set(teams.flat());
-      const total = t => t.reduce((s, id) => s + (playersMap[id] ? playersMap[id].rating : 0), 0);
+      const total = t => t.reduce((s, id) => s + (playersMap[id] ? effectiveRating(playersMap[id]) : 0), 0);
       for (const p of attending.filter(p => !placed.has(p.id)).sort((a, b) => a.id.localeCompare(b.id))) {
         let target = 0;
         teams.forEach((t, i) => {
@@ -1143,8 +1169,8 @@
       const info = teamInfo(i);
       const ps = sortedTeamPlayers(ids);
       const coachRule = coachRuleApplies(state.current.count, state.current.event);
-      const total = ps.reduce((s, p) => s + p.rating, 0);
-      const avg = ps.length ? (total / ps.length).toFixed(1) : '0';
+      const avg = teamStrength(ps).toFixed(1);
+      const passengers = ps.filter(isPassenger).length;
       const keeper = ps.some(p => p.positions.includes('GK'));
       const lowN = ps.filter(p => p.rating <= LOW_SCORE).length;
       const devN = ps.filter(p => p.traits.includes('Development')).length;
@@ -1159,7 +1185,8 @@
             <input class="team-name" value="${esc(info.name)}" maxlength="40" aria-label="Team name" onchange="saveTeamInfo(${i}, 'name', this.value)">
             <div class="stats">
               <span class="stat">${ps.length} players</span>
-              <span class="stat">Total ${total} · avg ${avg}</span>
+              <span class="stat" title="Average score per player. Development players scored 1 count as 0.">Strength ${avg}</span>
+              ${passengers ? `<span class="stat" title="Development players scored 1 count as 0 strength">${passengers} Dev·1</span>` : ''}
               ${teams.length > 1 ? `<span class="stat ${keeper ? 'good' : 'warn'}">${keeper ? '🧤 Keeper' : '⚠ No keeper'}</span>` : ''}
               ${teams.length > 1 && lowN ? `<span class="stat">${lowN} scored ≤${LOW_SCORE}</span>` : ''}
               ${teams.length > 1 && devN ? `<span class="stat">${devN} Dev</span>` : ''}
@@ -1341,15 +1368,15 @@
       bar.hidden = false;
     }
 
-    function renderSquad() {
-      const q = document.getElementById('search').value.trim().toLowerCase();
-      const all = playerList();
-      document.getElementById('squad-count').textContent = all.length ? `${all.length} players` : '';
-      const list = all.filter(p => !q || p.name.toLowerCase().includes(q) || (p.coach || '').toLowerCase().includes(q));
-      const el = document.getElementById('squad-list');
-      if (!state.playersLoaded) { el.innerHTML = '<div class="empty">Loading squad…</div>'; return; }
-      if (!list.length) { el.innerHTML = `<div class="empty">${all.length ? 'No players match that search.' : 'No players yet. Tap “+ Add player”, or import a backup file below.'}</div>`; return; }
-      el.innerHTML = list.map(p => `
+    function squadSort() {
+      try { return localStorage.getItem('pb_squad_sort') || 'name'; } catch (e) { return 'name'; }
+    }
+    function setSquadSort(v) {
+      try { localStorage.setItem('pb_squad_sort', v); } catch (e) {}
+      renderSquad();
+    }
+    function squadRow(p) {
+      return `
         <button class="sq ${p.attending ? '' : 'away'}" onclick="openEditor('${p.id}')">
           <span class="score ${p.rating <= LOW_SCORE ? 'low' : ''}">${p.rating}</span>
           <span>
@@ -1360,7 +1387,39 @@
             </span>
           </span>
           <span class="muted small">${p.attending ? 'Playing' : 'Out'}</span>
-        </button>`).join('');
+        </button>`;
+    }
+    function groupHtml(title, players) {
+      if (!players.length) return '';
+      return `<div class="group-head"><span>${esc(title)}</span><span>${players.length}</span></div>` + players.map(squadRow).join('');
+    }
+    function renderSquad() {
+      const q = document.getElementById('search').value.trim().toLowerCase();
+      const sort = squadSort();
+      document.getElementById('squad-sort').value = sort;
+      const all = playerList();
+      document.getElementById('squad-count').textContent = all.length ? `${all.length} players` : '';
+      const list = all.filter(p => !q || p.name.toLowerCase().includes(q) || (p.coach || '').toLowerCase().includes(q));
+      const el = document.getElementById('squad-list');
+      if (!state.playersLoaded) { el.innerHTML = '<div class="empty">Loading squad…</div>'; return; }
+      if (!list.length) { el.innerHTML = `<div class="empty">${all.length ? 'No players match that search.' : 'No players yet. Tap “+ Add player”, or import a backup file below.'}</div>`; return; }
+      const byName = (a, b) => a.name.localeCompare(b.name);
+      const byAbility = (a, b) => b.rating - a.rating || byName(a, b);
+      if (sort === 'ability-high' || sort === 'ability-low') {
+        const sorted = [...list].sort(byAbility);
+        if (sort === 'ability-low') sorted.reverse();
+        el.innerHTML = sorted.map(squadRow).join('');
+      } else if (sort === 'position') {
+        // Grouped by each player's best (1st choice) position, strongest first within each group
+        el.innerHTML = POSITIONS.map(pos => groupHtml(POSITION_NAMES[pos], list.filter(p => p.positions[0] === pos).sort(byAbility))).join('')
+          + groupHtml('No position set', list.filter(p => !p.positions.length).sort(byName));
+      } else if (sort === 'attribute') {
+        // A player with several attributes appears under each one
+        el.innerHTML = TRAITS.map(t => groupHtml(t, list.filter(p => p.traits.includes(t)).sort(byAbility))).join('')
+          + groupHtml('No attributes', list.filter(p => !p.traits.length).sort(byName));
+      } else {
+        el.innerHTML = list.map(squadRow).join('');
+      }
     }
 
     function renderHistory() {
